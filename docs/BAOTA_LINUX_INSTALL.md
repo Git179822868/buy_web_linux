@@ -185,6 +185,12 @@ JEEPAY_APP_ID="你的应用ID"
 JEEPAY_APP_SECRET="你的应用密钥"
 ```
 
+只改这些变量还不够。正式收款前还必须在 Jeepay、微信支付商户平台、支付宝开放平台完成商户、应用、支付产品、证书和回调配置。完整步骤见：
+
+```text
+docs/PAYMENT_SETUP.md
+```
+
 备份目录建议：
 
 ```env

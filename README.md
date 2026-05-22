@@ -110,7 +110,7 @@ npm run dev
 
 ## 支付模式
 
-本地默认：
+本项目有两种支付运行模式：
 
 ```env
 PAYMENT_PROVIDER="mock"
@@ -118,7 +118,24 @@ PAYMENT_PROVIDER="mock"
 
 这样可以不部署 Jeepay，用户注册/登录后下单，再在订单页点击“模拟支付成功”完成测试。
 
-生产切换 Jeepay：
+生产收款建议先接 Jeepay，由 Jeepay 再接微信支付官方、支付宝官方等上游通道。本项目已经内置以下 `wayCode`：
+
+| 前台支付方式 | Jeepay wayCode | 使用场景 | 上游需要开通 |
+| --- | --- | --- | --- |
+| 微信扫码 | `WX_NATIVE` | PC 网页展示二维码，用户用微信扫码 | 微信支付 Native 支付 |
+| 微信 H5 | `WX_H5` | 手机系统浏览器拉起微信支付，不支持微信内置浏览器 | 微信支付 H5 支付 |
+| 支付宝网页 | `ALI_PC` | PC 网页跳转支付宝收银台 | 支付宝电脑网站支付 |
+| 支付宝 H5 | `ALI_WAP` | 手机浏览器跳转支付宝 App 或网页收银台 | 支付宝手机网站支付 |
+
+正式切换 Jeepay 前，需要先完成：
+
+1. 独立部署 Jeepay，并确保支付网关公网可访问。
+2. 在 Jeepay 运营平台添加商户和应用，配置微信支付官方、支付宝官方通道参数。
+3. 在微信支付商户平台申请 Native/H5 支付权限；H5 支付通常需要可公网访问的已备案支付域名、经营内容页面和场景截图。
+4. 在支付宝开放平台创建网页/移动应用，配置密钥，上线审核，并在商家平台签约电脑网站支付、手机网站支付。
+5. 将 Jeepay 商户号、应用 ID、应用密钥写入本项目 `.env`。
+
+生产 `.env` 示例：
 
 ```env
 PAYMENT_PROVIDER="jeepay"
@@ -129,19 +146,33 @@ JEEPAY_APP_ID="Jeepay 应用 ID"
 JEEPAY_APP_SECRET="Jeepay 应用私钥"
 ```
 
-Jeepay 统一下单会使用：
+本项目调用 Jeepay 统一下单接口：
 
 ```text
 POST {JEEPAY_GATEWAY_URL}/api/pay/unifiedOrder
 ```
 
-Jeepay 支付通知回调到：
+Jeepay 支付通知回调到本项目：
 
 ```text
 {APP_PUBLIC_URL}/api/payments/jeepay/notify
 ```
 
-该回调接口会校验 `mchNo`、`appId`、MD5 签名、订单号和金额，成功后只返回小写 `success`。
+退款通知回调到：
+
+```text
+{APP_PUBLIC_URL}/api/refunds/notify/jeepay
+```
+
+回调接口会校验 `mchNo`、`appId`、MD5 签名、订单号和金额，成功后只返回小写 `success`。
+
+个人申请要求要提前确认：本项目不支持个人免签、个人收款码或手工收款码替代支付接口。正式线上收款通常需要真实经营主体、已备案域名、可展示的商品/服务页面、商户号和支付产品签约权限；个人要长期稳定接入，建议先办理个体工商户或企业主体，再按微信/支付宝官方审核要求申请。
+
+支付详细配置、官方原文链接和 Jeepay 后台填写项见：
+
+```text
+docs/PAYMENT_SETUP.md
+```
 
 ## 验证
 
