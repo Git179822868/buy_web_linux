@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  PENDING
+  PAYING
+  PAID
+  PAYMENT_FAILED
+  CANCELLED
+  FULFILLED
+  REFUND_PENDING
+  REFUNDED
+  CLOSED
+}
+
+enum PaymentProvider {
+  MOCK
+  JEEPAY
+}
+
+enum PaymentStatus {
+  CREATED
+  PAYING
+  PAID
+  FAILED
+  CLOSED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum RefundStatus {
+  CREATED
+  REFUNDING
+  SUCCESS
+  FAILED
+  CLOSED
+}
+
+enum AdminRole {
+  ADMIN
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum LedgerType {
+  RECHARGE
+  PURCHASE
+  REFUND
+  ADJUSTMENT
+}
+
+enum ProductType {
+  NORMAL
+  API
+}
+
+model User {
+  id            String          @id @default(cuid())
+  userNo        Int             @unique @default(autoincrement())
+  phone         String          @unique
+  passwordHash  String
+  nickname      String?
+  avatarUrl     String?         @db.VarChar(255)
+  apiSecretSalt String          @default("v1") @db.VarChar(64)
+  balanceCent   Int             @default(0)
+  status        UserStatus      @default(ACTIVE)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  orders        Order[]
+  ledgerEntries BalanceLedger[]
+
+  @@map("users")
+}
+
+model ServicePackage {
+  id             String      @id @default(cuid())
+  slug           String      @unique
+  name           String
+  description    String      @db.VarChar(512)
+  category       String      @default("account_follow") @db.VarChar(64)
+  categoryLabel  String      @default("账号关注") @db.VarChar(64)
+  filterKey      String      @default("normal") @db.VarChar(64)
+  filterLabel    String      @default("普通粉丝") @db.VarChar(64)
+  platformCode   String      @default("BD") @db.VarChar(16)
+  imageUrl       String      @default("/assets/package-thumb.png") @db.VarChar(255)
+  unit           String      @default("个") @db.VarChar(24)
+  productType    ProductType @default(NORMAL)
+  priceTemplate  String?     @db.VarChar(80)
+  baseQuantity   Int         @default(1)
+  minQuantity    Int         @default(1)
+  maxQuantity    Int         @default(1000000)
+  allowRepeat    Boolean     @default(true)
+  deliveryTime   String      @default("24-72小时") @db.VarChar(80)
+  completionRate Int         @default(95)
+  priceCent      Int
+  currency       String      @default("cny") @db.VarChar(8)
+  isActive       Boolean     @default(true)
+  sortOrder      Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  orders         Order[]
+
+  @@index([category, filterKey])
+  @@index([isActive, sortOrder])
+  @@map("service_packages")
+}
+
+model Order {
+  id                String          @id @default(cuid())
+  orderNo           String          @unique
+  userId            String
+  packageId         String
+  targetAccount     String          @db.VarChar(255)
+  cooperationCode   String?         @db.VarChar(80)
+  orderQuantity     Int             @default(1)
+  initialQuantity   Int?
+  currentQuantity   Int?
+  completedQuantity Int             @default(0)
+  refundQuantity    Int             @default(0)
+  refundAmountCent  Int             @default(0)
+  amountCent        Int
+  currency          String          @default("cny") @db.VarChar(8)
+  status            OrderStatus     @default(PENDING)
+  remark            String?         @db.VarChar(512)
+  adminRemark       String?         @db.VarChar(512)
+  executedAt        DateTime?
+  paidAt            DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  user              User            @relation(fields: [userId], references: [id])
+  package           ServicePackage  @relation(fields: [packageId], references: [id])
+  paymentRecords    PaymentRecord[]
+  refundRecords     RefundRecord[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("orders")
+}
+
+model PaymentRecord {
+  id              String          @id @default(cuid())
+  orderId         String
+  attemptNo       Int             @default(1)
+  provider        PaymentProvider
+  providerOrderId String?         @db.VarChar(64)
+  mchOrderNo      String          @db.VarChar(64)
+  amountCent      Int
+  currency        String          @default("cny") @db.VarChar(8)
+  wayCode         String          @db.VarChar(32)
+  payDataType     String?         @db.VarChar(32)
+  payData         String?         @db.Text
+  status          PaymentStatus   @default(CREATED)
+  rawRequestJson  Json?
+  rawResponseJson Json?
+  rawNotifyJson   Json?
+  paidAt          DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  order           Order           @relation(fields: [orderId], references: [id])
+  refundRecords   RefundRecord[]
+
+  @@unique([mchOrderNo])
+  @@unique([orderId, attemptNo])
+  @@index([provider, providerOrderId])
+  @@index([status, createdAt])
+  @@map("payment_records")
+}
+
+model RefundRecord {
+  id               String          @id @default(cuid())
+  orderId          String
+  paymentRecordId  String
+  provider         PaymentProvider
+  refundNo         String          @unique @db.VarChar(64)
+  mchRefundNo      String          @unique @db.VarChar(64)
+  providerRefundId String?         @db.VarChar(64)
+  amountCent       Int
+  currency         String          @default("cny") @db.VarChar(8)
+  reason           String          @db.VarChar(255)
+  status           RefundStatus    @default(CREATED)
+  rawRequestJson   Json?
+  rawResponseJson  Json?
+  rawNotifyJson    Json?
+  refundedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  order            Order           @relation(fields: [orderId], references: [id])
+  paymentRecord    PaymentRecord   @relation(fields: [paymentRecordId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@index([paymentRecordId, createdAt])
+  @@index([provider, providerRefundId])
+  @@index([status, createdAt])
+  @@map("refund_records")
+}
+
+model AdminUser {
+  id           String     @id @default(cuid())
+  username     String     @unique
+  passwordHash String
+  role         AdminRole  @default(STAFF)
+  name         String?    @db.VarChar(80)
+  phone        String?    @db.VarChar(20)
+  avatarUrl    String?    @db.VarChar(255)
+  bio          String?    @db.VarChar(512)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+
+  @@map("admin_users")
+}
+
+model AuditLog {
+  id          String     @id @default(cuid())
+  adminUserId String?
+  action      String     @db.VarChar(100)
+  targetType  String     @db.VarChar(64)
+  targetId    String?    @db.VarChar(64)
+  detailJson  Json?
+  createdAt   DateTime   @default(now())
+  adminUser   AdminUser? @relation(fields: [adminUserId], references: [id])
+
+  @@index([adminUserId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+model SiteSetting {
+  id          Int      @id @default(1)
+  siteName    String   @default("账号关注投放商城") @db.VarChar(120)
+  operator    String?  @db.VarChar(120)
+  icpNo       String?  @db.VarChar(80)
+  copyright   String?  @db.VarChar(160)
+  keywords    String?  @db.VarChar(255)
+  description String?  @db.VarChar(512)
+  logoUrl     String?  @db.VarChar(255)
+  icoUrl      String?  @db.VarChar(255)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("site_settings")
+}
+
+model ContactSetting {
+  id        String   @id @default(cuid())
+  type      String   @db.VarChar(32)
+  label     String   @db.VarChar(80)
+  value     String?  @db.VarChar(255)
+  qrUrl     String?  @db.VarChar(255)
+  isEnabled Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isEnabled, sortOrder])
+  @@map("contact_settings")
+}
+
+model BalanceLedger {
+  id               String     @id @default(cuid())
+  userId           String
+  type             LedgerType
+  amountCent       Int
+  balanceAfterCent Int
+  relatedOrderId   String?
+  remark           String?    @db.VarChar(255)
+  createdAt        DateTime   @default(now())
+  user             User       @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@map("balance_ledgers")
+}
+
+model SecurityEvent {
+  id          String   @id @default(cuid())
+  eventType   String   @db.VarChar(64)
+  scope       String   @db.VarChar(32)
+  identifier  String   @db.VarChar(191)
+  ip          String?  @db.VarChar(64)
+  subjectType String?  @db.VarChar(32)
+  subjectId   String?  @db.VarChar(191)
+  path        String?  @db.VarChar(255)
+  method      String?  @db.VarChar(12)
+  detailJson  Json?
+  createdAt   DateTime @default(now())
+
+  @@index([eventType, scope, identifier, createdAt])
+  @@index([ip, createdAt])
+  @@index([subjectType, subjectId, createdAt])
+  @@map("security_events")
+}
+
+model SecurityBlock {
+  id         String    @id @default(cuid())
+  scope      String    @db.VarChar(32)
+  identifier String    @db.VarChar(191)
+  reason     String    @db.VarChar(255)
+  expiresAt  DateTime?
+  createdBy  String?   @db.VarChar(64)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([scope, identifier])
+  @@index([expiresAt])
+  @@map("security_blocks")
+}

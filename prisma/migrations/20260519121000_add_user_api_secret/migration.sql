@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD COLUMN `apiSecretSalt` VARCHAR(64) NOT NULL DEFAULT 'v1';
