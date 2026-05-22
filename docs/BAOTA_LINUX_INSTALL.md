@@ -70,7 +70,7 @@ if [ -f /usr/bin/curl ]; then curl -sSO https://download.bt.cn/install/install_p
 
 - Nginx
 - MySQL 8.0
-- Node.js 20 或更高版本
+- Node.js 20.19+、22.13+ 或 24+，新手建议选择当前 LTS，不建议使用 Node 23
 - PM2 管理器，或在服务器终端用 `npm install -g pm2`
 
 如果宝塔软件商店里没有合适的 Git 或 MySQL client，在 SSH 里安装：
@@ -90,7 +90,7 @@ mysql --version
 mysqldump --version
 ```
 
-本项目要求 Node.js `20.9.0` 或更高版本。
+本项目建议使用 Node.js `20.19+`、`22.13+` 或 `24+`。不要用 Node 23 做生产部署，因为部分开发依赖不把 23 作为稳定支持线。
 
 ## 4. 创建数据库
 

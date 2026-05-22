@@ -37,9 +37,9 @@ EOF
   exit 1
 fi
 
-NODE_MAJOR="$(node -p "Number(process.versions.node.split('.')[0])")"
-if [ "$NODE_MAJOR" -lt 20 ]; then
-  printf '[buyweb] Node.js 20+ is required. Current version: %s\n' "$(node -v)" >&2
+NODE_OK="$(node -e "const [major, minor] = process.versions.node.split('.').map(Number); process.stdout.write(((major === 20 && minor >= 19) || (major === 22 && minor >= 13) || major >= 24) ? '1' : '0')")"
+if [ "$NODE_OK" != "1" ]; then
+  printf '[buyweb] Use Node.js 20.19+, 22.13+, or 24+. Current version: %s\n' "$(node -v)" >&2
   exit 1
 fi
 
