@@ -9,7 +9,7 @@
 | 网站与后台 | Next.js 16 + React 19 + TypeScript |
 | 数据库 | MySQL 8 |
 | ORM | Prisma |
-| 支付 | 本地 mock，生产接 Jeepay |
+| 支付 | 本地 mock 或 Jeepay，生产接 Jeepay |
 | 用户登录 | 手机号 + 密码 + 验证码，HTTP-only Cookie + JWT + bcrypt |
 | 后台登录 | 独立管理员账号，HTTP-only Cookie + JWT + bcrypt |
 | 部署 | 一个 Node.js 服务 + MySQL + Nginx |
@@ -117,6 +117,37 @@ PAYMENT_PROVIDER="mock"
 ```
 
 这样可以不部署 Jeepay，用户注册/登录后下单，再在订单页点击“模拟支付成功”完成测试。
+
+本机切换 Jeepay 前先看：
+
+```text
+docs/JEEPAY_LOCAL_DEPLOYMENT.md
+```
+
+Windows + Docker Desktop 本机启动 Jeepay：
+
+```powershell
+.\scripts\windows-jeepay-compose.ps1
+```
+
+Jeepay 后台入口：
+
+```text
+运营平台：http://localhost:9227  jeepay / jeepay123
+商户系统：http://localhost:9228  先在运营平台创建商户，默认密码 jeepay666
+支付网关：http://localhost:9216
+```
+
+本机 Jeepay `.env` 示例：
+
+```env
+PAYMENT_PROVIDER="jeepay"
+APP_PUBLIC_URL="http://host.docker.internal:3000"
+JEEPAY_GATEWAY_URL="http://127.0.0.1:9216"
+JEEPAY_MCH_NO="Jeepay 商户号"
+JEEPAY_APP_ID="Jeepay 应用 ID"
+JEEPAY_APP_SECRET="Jeepay 应用密钥"
+```
 
 生产收款建议先接 Jeepay，由 Jeepay 再接微信支付官方、支付宝官方等上游通道。本项目已经内置以下 `wayCode`：
 

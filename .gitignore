@@ -8,6 +8,7 @@ coverage
 !.env.example
 *.log
 logs
+.local
 prisma/dev.db
 *.tsbuildinfo
 public/uploads

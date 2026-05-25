@@ -7,6 +7,8 @@
 Jeepay：
 
 - Jeepay 开源项目：<https://github.com/jeequan/jeepay>
+- Jeepay Docker Compose 部署：<https://github.com/jeequan/jeepay/blob/master/docs/deploy/compose.md>
+- Jeepay 前端项目：<https://github.com/jeequan/jeepay-ui>
 - Jeepay 系统使用：<https://docs.jeequan.com/docs/jeepay/jeepay-1dbdn8bqgo270>
 - Jeepay 支付接口：<https://docs.jeequan.com/docs/jeepay_api/jeepay_api-1dabshnfu814r>
 - Jeepay 支付网关接口新版文档：<https://docs.jeequan.com/docs/jeepay/payment_api>
@@ -68,6 +70,23 @@ PAYMENT_PROVIDER="mock"
 PAYMENT_PROVIDER="jeepay"
 APP_PUBLIC_URL="https://www.example.com"
 JEEPAY_GATEWAY_URL="https://pay.example.com"
+JEEPAY_MCH_NO="Jeepay 商户号"
+JEEPAY_APP_ID="Jeepay 应用 ID"
+JEEPAY_APP_SECRET="Jeepay 应用密钥"
+```
+
+Windows 本机用 Docker Desktop 联调 Jeepay 时，先看：
+
+```text
+docs/JEEPAY_LOCAL_DEPLOYMENT.md
+```
+
+本机 `.env` 示例：
+
+```env
+PAYMENT_PROVIDER="jeepay"
+APP_PUBLIC_URL="http://host.docker.internal:3000"
+JEEPAY_GATEWAY_URL="http://127.0.0.1:9216"
 JEEPAY_MCH_NO="Jeepay 商户号"
 JEEPAY_APP_ID="Jeepay 应用 ID"
 JEEPAY_APP_SECRET="Jeepay 应用密钥"

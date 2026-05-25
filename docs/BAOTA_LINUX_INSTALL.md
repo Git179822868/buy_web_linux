@@ -189,7 +189,10 @@ JEEPAY_APP_SECRET="你的应用密钥"
 
 ```text
 docs/PAYMENT_SETUP.md
+docs/JEEPAY_LOCAL_DEPLOYMENT.md
 ```
+
+如果 Jeepay 也部署在这台宝塔服务器上，建议给 Jeepay 单独准备域名，例如 `pay.example.com`，并让 `JEEPAY_GATEWAY_URL` 指向 Jeepay 支付网关的 HTTPS 地址，而不是 `localhost`。`localhost` 只适合同机内部进程访问，微信和支付宝官方回调无法访问你的服务器本机地址。
 
 备份目录建议：
 
