@@ -70,9 +70,11 @@ Prisma 会在 `buyweb` 数据库中创建这些核心表：
 2. 创建数据库：
 
 ```sql
-CREATE USER 'buyweb'@'localhost' IDENTIFIED BY 'buyweb_dev';
-CREATE DATABASE buyweb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS buyweb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'buyweb'@'localhost' IDENTIFIED BY 'buyweb_dev';
+CREATE USER IF NOT EXISTS 'buyweb'@'127.0.0.1' IDENTIFIED BY 'buyweb_dev';
 GRANT ALL PRIVILEGES ON buyweb.* TO 'buyweb'@'localhost';
+GRANT ALL PRIVILEGES ON buyweb.* TO 'buyweb'@'127.0.0.1';
 FLUSH PRIVILEGES;
 ```
 
@@ -218,13 +220,22 @@ npm run build
 
 完整业务测试需要本机或服务器有 MySQL，并执行 Prisma 迁移和 seed。
 
-## Linux / 宝塔部署
+## Linux / 腾讯云轻量灯塔 / 宝塔部署
 
 新手部署请先看：
 
 ```text
 docs/BAOTA_LINUX_INSTALL.md
 ```
+
+这份文档按腾讯云轻量应用服务器（Lighthouse，很多人也叫轻量/灯塔）+ 宝塔面板 + Nginx + MySQL 8 + PM2 来写，包含：
+
+- 轻量服务器安全组端口放行。
+- 宝塔面板安装和运行环境选择。
+- `buyweb` 数据库创建、运行账号和迁移账号拆分。
+- Nginx 反向代理到 `http://127.0.0.1:3000`。
+- 宝塔 Let's Encrypt SSL 证书自动申请和续签。
+- MySQL 备份、校验和恢复演练。
 
 Linux 服务器上不要复制 Windows 的 `node_modules` 或 `.next`。请在服务器项目目录重新执行：
 

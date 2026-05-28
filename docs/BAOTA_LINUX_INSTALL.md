@@ -1,6 +1,8 @@
-# Linux / 宝塔新手部署指南
+# 腾讯云轻量灯塔 / 宝塔 Linux 新手部署指南
 
-本文面向第一次部署的新手，目标是在一台新的 Linux 服务器上用宝塔面板运行本项目。
+本文面向第一次部署的新手，目标是在腾讯云轻量应用服务器（Lighthouse，常被叫作轻量/灯塔）或同类 Linux VPS 上，用宝塔面板运行本项目。
+
+本文里的“自动申领”按 Nginx + SSL 证书自动申请和续签处理。SSH 只用于登录服务器，不需要证书申领；如果你要的是 GitHub SSH 拉代码，建议后续单独配置部署密钥。
 
 官方资料：
 
@@ -8,7 +10,7 @@
 - 宝塔基础环境安装文档：<https://docs.bt.cn/getting-started/install-basic-environment>
 - 宝塔下载页：<https://www.bt.cn/new/download>
 
-## 1. 准备服务器
+## 1. 准备腾讯云轻量服务器
 
 推荐系统：
 
@@ -22,17 +24,25 @@
 - 磁盘：40 GB 起步，备份多时建议更大
 - 架构：x86_64
 
+在腾讯云轻量控制台创建实例后，先做三件事：
+
+1. 记录公网 IP。
+2. 在域名 DNS 里添加 A 记录，例如 `www.example.com -> 服务器公网 IP`。
+3. 在轻量控制台的防火墙/安全组放行必要端口。
+
 安全组或防火墙先开放：
 
 - `22`：SSH
 - `80`：HTTP
 - `443`：HTTPS
-- `8888`：宝塔面板首次访问端口，安装完成后建议在宝塔里修改面板端口
+- `8888`：宝塔面板首次访问端口，安装完成后建议在宝塔里修改面板端口，并尽量限制为自己的 IP
 
 不要开放：
 
 - `3000`：Next.js 只给 Nginx 本机反代访问
 - `3306`：MySQL 不要暴露公网
+
+域名 DNS 生效后再申请 SSL。Let's Encrypt 的 HTTP 验证需要公网能访问 `80` 端口，证书续签时也要保持 `80` 可用。
 
 宝塔官方建议用干净系统安装，不要在已经装过 Apache、Nginx、MySQL、PHP、Java、GitLab 等复杂环境的服务器上直接装面板。
 
@@ -94,6 +104,17 @@ mysqldump --version
 
 ## 4. 创建数据库
 
+本项目必须使用独立数据库 `buyweb`。如果同一台 MySQL 也给 Jeepay 使用，请保持两个库分开：
+
+```text
+jeepaydb    # Jeepay 使用
+buyweb      # 本项目使用
+```
+
+不要把本项目表建进 `jeepaydb`，避免 Jeepay 升级或迁移时互相污染。
+
+### 方法 A：宝塔面板创建
+
 在宝塔面板打开：
 
 ```text
@@ -108,21 +129,51 @@ mysqldump --version
 - 访问权限：本地服务器
 - 字符集：`utf8mb4`
 
-如果用 SSH 创建，可参考：
+这种方法适合第一次上线。创建完成后，`.env` 可以先使用宝塔生成的数据库账号：
+
+```env
+DATABASE_URL="mysql://buyweb:你的数据库密码@127.0.0.1:3306/buyweb"
+```
+
+### 方法 B：SSH 命令创建
+
+登录服务器后进入 MySQL：
+
+```bash
+mysql -u root -p
+```
+
+执行：
 
 ```sql
-CREATE DATABASE buyweb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'buyweb'@'127.0.0.1' IDENTIFIED BY '替换为强密码';
+CREATE DATABASE IF NOT EXISTS buyweb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'buyweb'@'127.0.0.1' IDENTIFIED BY '替换为强密码';
 GRANT ALL PRIVILEGES ON buyweb.* TO 'buyweb'@'127.0.0.1';
 FLUSH PRIVILEGES;
 ```
 
-生产更推荐拆分两个账号：
+### 生产推荐：运行账号和迁移账号拆分
+
+长期生产更推荐拆分两个账号：
 
 - `buyweb_app`：应用运行账号，只给 `SELECT, INSERT, UPDATE, DELETE`
 - `buyweb_migrate`：迁移账号，只在部署时临时用于 `npm run db:deploy`
 
 完整示例见 `docs/mysql-init.sql`。
+
+拆分后，日常运行 `.env` 使用运行账号：
+
+```env
+DATABASE_URL="mysql://buyweb_app:运行账号强密码@127.0.0.1:3306/buyweb"
+```
+
+需要升级数据库结构时，临时用迁移账号执行：
+
+```bash
+DATABASE_URL="mysql://buyweb_migrate:迁移账号强密码@127.0.0.1:3306/buyweb" npm run db:deploy
+```
+
+迁移完成后重启应用，让 PM2 继续读取 `.env` 里的运行账号。
 
 ## 5. 下载项目代码
 
@@ -288,6 +339,12 @@ pm2 stop buyweb
 
 ## 10. 在宝塔配置网站和反向代理
 
+先确认 PM2 已经启动，并且服务器本机能访问 Next.js：
+
+```bash
+curl -I http://127.0.0.1:3000
+```
+
 宝塔面板路径：
 
 ```text
@@ -315,15 +372,22 @@ pm2 stop buyweb
 
 保存后访问域名，应该能看到商城首页。
 
+如果腾讯云轻量安全组已经放行 `80`，但域名仍打不开，按顺序检查：
+
+1. 域名 A 记录是否指向当前服务器公网 IP。
+2. 宝塔站点域名是否填写完整，例如 `www.example.com`。
+3. PM2 进程是否 online。
+4. 本机 `curl -I http://127.0.0.1:3000` 是否成功。
+
 如果想手动配置 Nginx，可参考：
 
 ```text
 docs/examples/nginx-buyweb.conf
 ```
 
-不要直接复制覆盖宝塔生成的完整配置。建议先在宝塔站点配置里追加反代和限流片段，保存前先备份原配置。
+不要直接复制覆盖宝塔生成的完整配置。建议先在宝塔站点配置里追加反代、限流和安全头片段，保存前先备份原配置。`limit_req_zone` 和 `limit_conn_zone` 必须放在 Nginx 全局 `http {}` 内；站点内只放 `server {}` 里的内容。
 
-## 11. 配置 HTTPS
+## 11. Nginx SSL 自动申请和续签
 
 宝塔面板路径：
 
@@ -331,15 +395,35 @@ docs/examples/nginx-buyweb.conf
 网站 -> 你的站点 -> SSL
 ```
 
-选择：
+申请前先确认：
 
-- Let's Encrypt
-- 或者你的云厂商证书
+- 域名已经解析到这台腾讯云轻量服务器公网 IP。
+- 轻量安全组和系统防火墙都放行 `80` 和 `443`。
+- 宝塔站点已经绑定这个域名。
+- Nginx 能正常代理到 `http://127.0.0.1:3000`。
+
+新手优先选择：
+
+```text
+Let's Encrypt -> 文件验证 / HTTP 验证 -> 选择域名 -> 申请
+```
+
+宝塔申请成功后会自动写入 Nginx 的 `ssl_certificate` 配置，并通常会创建自动续签任务。不要手动修改证书路径，除非你知道宝塔实际保存证书的位置。
 
 申请成功后开启：
 
 - 强制 HTTPS
 - HTTP/2，如果宝塔当前 Nginx 支持
+- 自动续签，如果面板提供这个选项
+
+如果自动申请失败，优先检查：
+
+- DNS 是否已经生效，可以在本机执行 `nslookup 你的域名`。
+- `80` 端口是否被腾讯云轻量安全组放行。
+- 宝塔站点是否绑定了同一个域名。
+- 是否提前把 HTTP 全部重定向到错误地址，导致 `/.well-known/acme-challenge/` 验证失败。
+
+使用云厂商证书也可以，但流程变成：在云厂商申请证书，下载 Nginx 格式证书，然后在宝塔 SSL 页面粘贴证书和私钥。
 
 然后把 `.env` 里的 `APP_PUBLIC_URL` 改成 HTTPS 域名：
 
@@ -409,6 +493,7 @@ cleanup-candidates.txt
 - 宝塔反向代理目标是 `http://127.0.0.1:3000`
 - 服务器安全组没有开放 `3000` 和 `3306`
 - `.env` 里的 `APP_PUBLIC_URL` 是真实 HTTPS 域名
+- 宝塔 SSL 已申请成功，强制 HTTPS 和自动续签已开启
 - `AUTH_SECRET` 已换成强随机字符串
 - 备份任务已创建并手动测试过
 - Jeepay 回调地址配置为 `{APP_PUBLIC_URL}/api/payments/jeepay/notify`
@@ -510,6 +595,17 @@ ls -ld /var/backups/buyweb
 ```bash
 MYSQL_BACKUP_DIR=/var/backups/buyweb npm run backup:mysql
 ```
+
+### SSL 自动申请失败
+
+先不要改应用代码，按基础链路排查：
+
+```bash
+nslookup 你的域名
+curl -I http://你的域名
+```
+
+确认域名指向当前服务器公网 IP，腾讯云轻量安全组放行 `80/443`，宝塔站点绑定了同一个域名。Let's Encrypt 文件验证期间不要拦截 `/.well-known/acme-challenge/` 路径。
 
 ### 修改 `.env` 后不生效
 

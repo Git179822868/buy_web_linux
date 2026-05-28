@@ -120,6 +120,18 @@ pm2 startup
 
 `npm run start` 已绑定 `127.0.0.1:3000`，生产只让 Nginx 暴露公网端口。不要把 Node.js 或 MySQL 端口直接暴露到公网。
 
+## 腾讯云轻量灯塔 + 宝塔部署要点
+
+腾讯云轻量应用服务器（Lighthouse，常被叫作轻量/灯塔）部署时建议：
+
+- 系统选择 Debian 12、Ubuntu 22.04 或 Ubuntu 24.04 的干净镜像。
+- 轻量控制台防火墙只长期放行 `22`、`80`、`443`；宝塔面板端口只在管理时放行或限制到自己的 IP。
+- 不要放行 `3000` 和 `3306`，Next.js 只监听 `127.0.0.1:3000`，MySQL 只监听 `127.0.0.1`。
+- 域名 A 记录先指向服务器公网 IP，再申请 SSL。
+- 宝塔站点使用 Nginx 反向代理到 `http://127.0.0.1:3000`，PM2 负责托管 Node 进程。
+
+完整新手步骤见 `docs/BAOTA_LINUX_INSTALL.md`。Nginx 片段见 `docs/examples/nginx-buyweb.conf`。
+
 Nginx 示例。`limit_req_zone` 和 `limit_conn_zone` 放在 `http {}` 内，`server {}` 放在站点配置内：
 
 ```nginx
@@ -179,23 +191,31 @@ server {
 }
 ```
 
-HTTPS 推荐使用云厂商证书或 certbot。
+HTTPS 推荐使用宝塔 Let's Encrypt 自动申请和续签、云厂商证书或 certbot。宝塔申请 Let's Encrypt 前必须确保域名已解析到服务器公网 IP，并且 `80` 端口可公网访问。
 
 ## MySQL 安全
+
+先创建独立数据库，且不要和 Jeepay 共用同一个 schema：
+
+```sql
+CREATE DATABASE IF NOT EXISTS buyweb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
 生产建议拆分运行账号和迁移账号：
 
 ```sql
-CREATE USER 'buyweb_app'@'127.0.0.1' IDENTIFIED BY 'replace_runtime_password';
+CREATE USER IF NOT EXISTS 'buyweb_app'@'127.0.0.1' IDENTIFIED BY 'replace_runtime_password';
 GRANT SELECT, INSERT, UPDATE, DELETE ON buyweb.* TO 'buyweb_app'@'127.0.0.1';
 
-CREATE USER 'buyweb_migrate'@'127.0.0.1' IDENTIFIED BY 'replace_migration_password';
+CREATE USER IF NOT EXISTS 'buyweb_migrate'@'127.0.0.1' IDENTIFIED BY 'replace_migration_password';
 GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES ON buyweb.* TO 'buyweb_migrate'@'127.0.0.1';
 
 FLUSH PRIVILEGES;
 ```
 
 运行时 `.env` 使用 `buyweb_app`。部署迁移时临时使用 `buyweb_migrate` 执行 `npm run db:deploy`，执行完成后切回运行账号。
+
+如果是新手第一次用宝塔，可以先用宝塔面板的 `数据库 -> MySQL -> 添加数据库` 创建 `buyweb`。后续生产稳定后，再按 `docs/mysql-init.sql` 拆分运行账号和迁移账号。
 
 MySQL 只监听本机：
 
@@ -227,8 +247,8 @@ MYSQL_BACKUP_DIR=/var/backups/buyweb npm run backup:mysql
 cron 示例：
 
 ```cron
-15 3 * * * cd /srv/buy_web && /usr/bin/npm run backup:mysql >> /var/log/buyweb-backup.log 2>&1
-30 4 * * 0 cd /srv/buy_web && /usr/bin/npm run backup:verify >> /var/log/buyweb-backup-verify.log 2>&1
+15 3 * * * cd /www/wwwroot/buy_web_linux && /usr/bin/npm run backup:mysql >> /var/log/buyweb-backup.log 2>&1
+30 4 * * 0 cd /www/wwwroot/buy_web_linux && /usr/bin/npm run backup:verify >> /var/log/buyweb-backup-verify.log 2>&1
 ```
 
 `backup:mysql` 会生成：
