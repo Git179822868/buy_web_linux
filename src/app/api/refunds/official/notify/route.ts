@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 
-import { JeepayGateway } from "@/lib/jeepay";
+import { OfficialCompositeGateway } from "@/lib/payment-gateway";
 import { handleRefundNotify } from "@/lib/purchase";
 import { securitySwitchEnabled } from "@/lib/security";
 
-async function parseNotifyBody(request: Request) {
-  const contentType = request.headers.get("content-type") || "";
+async function parseSignedJsonNotify(request: Request) {
+  const rawBody = await request.text();
+  const params = JSON.parse(rawBody) as Record<string, unknown>;
 
-  if (contentType.includes("application/json")) {
-    return (await request.json()) as Record<string, unknown>;
-  }
-
-  const form = await request.formData();
-  return Object.fromEntries(form.entries()) as Record<string, unknown>;
+  return {
+    ...params,
+    __officialRawBody: rawBody,
+    __officialTimestamp: request.headers.get("x-buy-web-timestamp") || "",
+    __officialSignature: request.headers.get("x-buy-web-signature") || "",
+  };
 }
 
 export async function POST(request: Request) {
@@ -21,8 +22,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const params = await parseNotifyBody(request);
-    const gateway = new JeepayGateway();
+    const params = await parseSignedJsonNotify(request);
+    const gateway = new OfficialCompositeGateway();
     const verified = gateway.verifyRefundNotify(params);
     await handleRefundNotify(verified);
   } catch {

@@ -24,6 +24,19 @@
 - 磁盘：40 GB 起步，备份多时建议更大
 - 架构：x86_64
 
+低配服务器先按保守策略部署：先创建 2G Swap，再安装宝塔、Nginx、MySQL、Node.js 和 PM2。不要安装 Docker、Jeepay、RocketMQ 或 Java 支付中台；允许开机自启的服务只保留 `ssh`、宝塔面板、Nginx、MySQL 和 `pm2-root`。
+
+创建 Swap 示例：
+
+```bash
+fallocate -l 2G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+free -h
+```
+
 在腾讯云轻量控制台创建实例后，先做三件事：
 
 1. 记录公网 IP。
@@ -104,14 +117,13 @@ mysqldump --version
 
 ## 4. 创建数据库
 
-本项目必须使用独立数据库 `buyweb`。如果同一台 MySQL 也给 Jeepay 使用，请保持两个库分开：
+本项目必须使用独立数据库 `buyweb`：
 
 ```text
-jeepaydb    # Jeepay 使用
 buyweb      # 本项目使用
 ```
 
-不要把本项目表建进 `jeepaydb`，避免 Jeepay 升级或迁移时互相污染。
+不要把支付证书、私钥或 PHP 网关配置放进数据库或提交到 GitHub。
 
 ### 方法 A：宝塔面板创建
 
@@ -226,24 +238,20 @@ TRUSTED_PROXY_COUNT="1"
 PAYMENT_PROVIDER="mock"
 ```
 
-接入 Jeepay 后再改：
+接入官方支付后再改：
 
 ```env
-PAYMENT_PROVIDER="jeepay"
-JEEPAY_GATEWAY_URL="https://你的Jeepay网关"
-JEEPAY_MCH_NO="你的商户号"
-JEEPAY_APP_ID="你的应用ID"
-JEEPAY_APP_SECRET="你的应用密钥"
+PAYMENT_PROVIDER="official"
+OFFICIAL_PAY_GATEWAY_URL="http://127.0.0.1:7301"
+OFFICIAL_PAY_GATEWAY_SECRET="至少32位随机密钥"
+PAYMENT_RECONCILE_SECRET="另一个随机密钥"
 ```
 
-只改这些变量还不够。正式收款前还必须在 Jeepay、微信支付商户平台、支付宝开放平台完成商户、应用、支付产品、证书和回调配置。完整步骤见：
+只改这些变量还不够。正式收款前还必须在微信支付商户平台、支付宝开放平台完成商户、应用、支付产品、证书和回调配置，并部署 `official-pay-gateway`。完整步骤见：
 
 ```text
 docs/PAYMENT_SETUP.md
-docs/JEEPAY_LOCAL_DEPLOYMENT.md
 ```
-
-如果 Jeepay 也部署在这台宝塔服务器上，建议给 Jeepay 单独准备域名，例如 `pay.example.com`，并让 `JEEPAY_GATEWAY_URL` 指向 Jeepay 支付网关的 HTTPS 地址，而不是 `localhost`。`localhost` 只适合同机内部进程访问，微信和支付宝官方回调无法访问你的服务器本机地址。
 
 备份目录建议：
 
@@ -496,7 +504,10 @@ cleanup-candidates.txt
 - 宝塔 SSL 已申请成功，强制 HTTPS 和自动续签已开启
 - `AUTH_SECRET` 已换成强随机字符串
 - 备份任务已创建并手动测试过
-- Jeepay 回调地址配置为 `{APP_PUBLIC_URL}/api/payments/jeepay/notify`
+- mock 支付完整跑通过注册、登录、下单、后台订单
+- 如果切换真实收款，`official-pay-gateway` 的 `/official-pay/health` 正常
+- 如果切换真实收款，微信/支付宝回调指向 `{APP_PUBLIC_URL}/official-pay/notify/*`
+- 如果切换真实收款，`PAYMENT_RECONCILE_SECRET` 和支付补偿定时任务已配置
 
 ## 14. 常见问题
 
@@ -536,6 +547,45 @@ cat .env
 
 ```bash
 mysql -h 127.0.0.1 -u buyweb -p buyweb
+```
+
+### 宝塔数据库页面看不到 buyweb
+
+宝塔页面只显示宝塔自己登记过的数据库。SSH 里手动 `CREATE DATABASE buyweb` 后，MySQL 里已经有库，但宝塔列表可能暂时不显示。
+
+优先用宝塔的：
+
+```text
+数据库 -> MySQL -> 同步数据库
+```
+
+如果新版宝塔同步后仍不显示，可以在宝塔里点“添加数据库”，填同名 `buyweb` 和同名用户，让面板把它登记进列表。新版宝塔 11.7 的面板数据库列表记录在：
+
+```text
+/www/server/panel/data/db/database.db
+```
+
+不要手动改这个 SQLite 文件，除非你已经备份并确认字段结构。旧版本文章常提到的 `/www/server/panel/data/default.db` 在新版面板里不一定再负责数据库列表。
+
+### Nginx 提示找不到 SSL 证书
+
+如果报错类似：
+
+```text
+cannot load certificate "/etc/letsencrypt/live/你的域名/fullchain.pem"
+```
+
+说明 Nginx 配置还指向旧 certbot 路径，但宝塔实际证书通常在：
+
+```text
+/www/server/panel/vhost/cert/站点名/fullchain.pem
+/www/server/panel/vhost/cert/站点名/privkey.pem
+```
+
+在宝塔站点 SSL 页面重新部署证书，或把站点 Nginx 配置里的 `ssl_certificate` 和 `ssl_certificate_key` 改成宝塔实际路径，然后执行：
+
+```bash
+nginx -t && systemctl reload nginx
 ```
 
 ### Prisma 报找不到 Linux query engine

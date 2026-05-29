@@ -6,22 +6,19 @@
 Nginx
   /              -> Next.js app :3000
   /api           -> Next.js app :3000
-
-pay.example.com  -> Jeepay 支付网关
+  /official-pay/notify/* -> PHP-FPM official-pay-gateway
 
 MySQL 8
   buyweb
-  jeepaydb
 ```
 
 第一版可以只让公网访问：
 
 ```text
-www.example.com       账号关注投放商城
-pay.example.com       Jeepay 收银台 / 支付网关
+www.example.com       账号关注投放商城和官方支付回调入口
 ```
 
-Jeepay 的运营平台、商户平台可以只放内网或限制 IP 访问。
+下单、查单和退款接口只允许 Next.js 从 `127.0.0.1` 调 PHP 网关，不对公网暴露。
 
 ## Windows 无 Docker 本地测试
 
@@ -55,7 +52,7 @@ ADMIN_SEED_PASSWORD="Admin@123456"
 PAYMENT_PROVIDER="mock"
 ```
 
-这样不需要先部署 Jeepay，也能完整测试注册、登录、下单、模拟支付、后台查单。
+这样不需要先部署真实支付，也能完整测试注册、登录、下单、模拟支付、后台查单。
 
 ## 后台与数据库范围
 
@@ -193,9 +190,56 @@ server {
 
 HTTPS 推荐使用宝塔 Let's Encrypt 自动申请和续签、云厂商证书或 certbot。宝塔申请 Let's Encrypt 前必须确保域名已解析到服务器公网 IP，并且 `80` 端口可公网访问。
 
+## 官方支付网关
+
+低配服务器不要部署 Jeepay、Docker、RocketMQ 或 Java 支付中台。真实收款使用 `official-pay-gateway`：
+
+```bash
+cd /www/wwwroot/buy_web_linux/official-pay-gateway
+composer install --no-dev --optimize-autoloader
+cp config.example.php config.php
+```
+
+商户证书和私钥放到站点目录外，例如 `/etc/buy_web/pay-certs`。`config.php`、证书、私钥、API v3 key 不进入 GitHub。
+
+Next.js 生产 `.env`：
+
+```env
+PAYMENT_PROVIDER="official"
+OFFICIAL_PAY_GATEWAY_URL="http://127.0.0.1:7301"
+OFFICIAL_PAY_GATEWAY_SECRET="替换为随机长密钥"
+PAYMENT_RECONCILE_SECRET="替换为另一个随机长密钥"
+```
+
+公网只暴露上游回调：
+
+```nginx
+location ^~ /official-pay/notify/ {
+    root /www/wwwroot/buy_web_linux/official-pay-gateway/public;
+    try_files /index.php =404;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME /www/wwwroot/buy_web_linux/official-pay-gateway/public/index.php;
+    fastcgi_pass unix:/tmp/php-cgi-82.sock;
+}
+
+location ^~ /official-pay/health {
+    root /www/wwwroot/buy_web_linux/official-pay-gateway/public;
+    try_files /index.php =404;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME /www/wwwroot/buy_web_linux/official-pay-gateway/public/index.php;
+    fastcgi_pass unix:/tmp/php-cgi-82.sock;
+}
+```
+
+支付平台或回调短暂故障时，用受密钥保护的补偿接口主动查单：
+
+```cron
+*/5 * * * * curl -fsS -X POST "https://www.example.com/api/payments/reconcile?limit=20&minAgeMinutes=2" -H "x-buy-web-reconcile-secret: 替换为补偿密钥" >> /var/log/buyweb-payment-reconcile.log 2>&1
+```
+
 ## MySQL 安全
 
-先创建独立数据库，且不要和 Jeepay 共用同一个 schema：
+先创建独立数据库：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS buyweb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -293,10 +337,12 @@ PAYMENT_WRITE_DISABLED="true"
 - `AUTH_SECRET` 已换成长随机字符串。
 - `ADMIN_SEED_PASSWORD` 已换成强密码。
 - `TRUSTED_PROXY_COUNT=1`，且 Nginx 使用 `$remote_addr` 设置 `X-Real-IP` 和 `X-Forwarded-For`。
-- `PAYMENT_PROVIDER=jeepay`。
+- `PAYMENT_PROVIDER=official`。
 - `APP_PUBLIC_URL` 是公网 HTTPS 域名。
-- Jeepay 商户应用已配置通道参数。
-- Jeepay 能访问 `{APP_PUBLIC_URL}/api/payments/jeepay/notify`。
+- PHP official-pay-gateway 已安装依赖并能返回 `/official-pay/health`。
+- 微信支付、支付宝证书和私钥放在站点目录外，未提交到 Git。
+- 微信/支付宝能访问 `{APP_PUBLIC_URL}/official-pay/notify/*`。
+- `PAYMENT_RECONCILE_SECRET` 已配置，cron 可调用 `/api/payments/reconcile`。
 - MySQL 已绑定 `127.0.0.1`，运行账号没有 DDL 权限。
 - MySQL 已配置每日备份和 binlog。
 - 已执行 `npm run security:scan`、`npm run typecheck`、`npm run lint`、`npm run build`。

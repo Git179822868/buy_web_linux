@@ -12,3 +12,10 @@ logs
 prisma/dev.db
 *.tsbuildinfo
 public/uploads
+text.pem
+*.pem
+*.key
+*.crt
+official-pay-gateway/config.php
+official-pay-gateway/vendor
+pay-certs

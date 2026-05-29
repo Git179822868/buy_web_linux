@@ -12,8 +12,14 @@ export function appPublicUrl() {
   return (process.env.APP_PUBLIC_URL || "http://localhost:3000").replace(/\/$/, "");
 }
 
+export type PaymentProviderMode = "mock" | "official";
+
 export function paymentProvider() {
-  return process.env.PAYMENT_PROVIDER?.toLowerCase() === "jeepay"
-    ? "jeepay"
-    : "mock";
+  const provider = process.env.PAYMENT_PROVIDER?.toLowerCase();
+
+  if (provider === "official") {
+    return "official";
+  }
+
+  return "mock";
 }

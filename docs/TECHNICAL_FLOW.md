@@ -16,7 +16,7 @@
   -> Next.js API 创建订单
   -> Prisma 写入 MySQL
   -> 创建 payment_records 支付记录
-  -> mock 本地支付或 Jeepay 正式支付
+  -> mock 本地支付或 official 官方支付网关
   -> 支付成功后更新订单和支付状态
   -> 后台客服查看订单并处理
 ```
@@ -34,8 +34,8 @@
 | 登录 | Cookie + JWT + bcrypt | 用户和管理员认证 |
 | 验证码 | 签名 SVG 验证码 | 登录/注册前先校验，减少恶意写库 |
 | 安全限流 | Prisma 安全事件表 | 记录注册、登录、下单、支付查询等高风险行为 |
-| 本地支付 | mock | 不部署 Jeepay 也能测试下单支付 |
-| 正式支付 | Jeepay | 对接微信、支付宝等国内支付通道 |
+| 本地支付 | mock | 不部署真实支付也能测试下单支付 |
+| 正式支付 | official-pay-gateway + yansongda/pay | 对接微信支付和支付宝官方通道 |
 | 部署 | Node.js + MySQL + Nginx | 保持部署组件最少 |
 
 ## 核心数据库表
@@ -45,7 +45,7 @@
 | `users` | 用户手机号、密码、余额、状态 |
 | `service_packages` | 服务套餐、分类、价格、数量范围、上下架 |
 | `orders` | 订单号、用户、套餐、目标账号、数量、金额、订单状态 |
-| `payment_records` | 支付渠道、支付状态、Jeepay 请求/响应/通知原文 |
+| `payment_records` | 支付渠道、支付状态、official 请求/响应/通知原文 |
 | `admin_users` | 后台管理员 |
 | `site_settings` | 网站名称、备案、关键词、描述 |
 | `contact_settings` | 客服联系方式 |
@@ -67,33 +67,33 @@ mock 模式会创建订单和支付记录，订单页可以点击模拟支付成
 生产环境切换为：
 
 ```env
-PAYMENT_PROVIDER="jeepay"
+PAYMENT_PROVIDER="official"
 APP_PUBLIC_URL="https://www.example.com"
-JEEPAY_GATEWAY_URL="https://pay.example.com"
-JEEPAY_MCH_NO="商户号"
-JEEPAY_APP_ID="应用 ID"
-JEEPAY_APP_SECRET="应用密钥"
+OFFICIAL_PAY_GATEWAY_URL="http://127.0.0.1:7301"
+OFFICIAL_PAY_GATEWAY_SECRET="内部 HMAC 密钥"
+PAYMENT_RECONCILE_SECRET="支付补偿接口密钥"
 ```
 
-Jeepay 下单接口：
+Next.js 内部调用 PHP 网关：
 
 ```text
-POST {JEEPAY_GATEWAY_URL}/api/pay/unifiedOrder
+POST {OFFICIAL_PAY_GATEWAY_URL}/payments
 ```
 
-Jeepay 支付通知：
+微信/支付宝先回调 PHP 网关，官方验签后再转发给 Next.js：
 
 ```text
-{APP_PUBLIC_URL}/api/payments/jeepay/notify
+{APP_PUBLIC_URL}/official-pay/notify/*
+{APP_PUBLIC_URL}/api/payments/official/notify
 ```
 
-通知接口会校验商户号、应用 ID、MD5 签名、订单号和金额，校验通过后更新订单状态和支付记录。
+内部通知使用 HMAC-SHA256 校验 `timestamp.body`，并再次核对订单号和金额。支付平台故障或回调失败时，`/api/payments/reconcile` 会主动查询仍处于 `CREATED/PAYING` 的 official 支付记录。
 
 ## 付费部分参考项目
 
 | 项目 | 用途 |
 | --- | --- |
-| [jeequan/jeepay](https://github.com/jeequan/jeepay) | 正式支付平台，适合国内微信、支付宝、云闪付等聚合支付 |
+| [yansongda/pay](https://github.com/yansongda/pay) | PHP 微信支付和支付宝 SDK，当前 official 支付网关使用 |
 | [vercel/nextjs-stripe-template](https://github.com/vercel/nextjs-stripe-template) | 参考最简单的商品展示、点击支付、支付完成流程 |
 | [nextjs/saas-starter](https://github.com/nextjs/saas-starter) | 参考登录、定价页、用户后台、账单状态管理 |
 | [joschan21/digitalhippo](https://github.com/joschan21/digitalhippo) | 参考虚拟商品/数字服务商城、商品后台、购买后订单管理 |

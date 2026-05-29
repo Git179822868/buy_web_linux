@@ -9,20 +9,19 @@
 | 网站与后台 | Next.js 16 + React 19 + TypeScript |
 | 数据库 | MySQL 8 |
 | ORM | Prisma |
-| 支付 | 本地 mock 或 Jeepay，生产接 Jeepay |
+| 支付 | 本地 mock 或 yansongda/pay 官方微信/支付宝网关 |
 | 用户登录 | 手机号 + 密码 + 验证码，HTTP-only Cookie + JWT + bcrypt |
 | 后台登录 | 独立管理员账号，HTTP-only Cookie + JWT + bcrypt |
 | 部署 | 一个 Node.js 服务 + MySQL + Nginx |
 
-Jeepay 自己仍然独立部署。为了减少组件数量，我们的网站使用 Jeepay 同一台 MySQL 实例，但必须使用独立数据库：
+真实收款不再部署 Jeepay、Docker、RocketMQ 或 Java 支付中台。网站继续使用独立数据库：
 
 ```text
 mysql server
-  jeepaydb    # Jeepay 自己使用
   buyweb      # 本系统使用
 ```
 
-不要把本系统表建进 `jeepaydb`，避免后续 Jeepay 升级和迁移冲突。
+支付证书和商户私钥放在服务器站点目录外，不进入 GitHub。
 
 更完整的技术流、支付设计和开源参考项目见：
 
@@ -55,7 +54,7 @@ Prisma 会在 `buyweb` 数据库中创建这些核心表：
 | `users` | 用户手机号登录、余额、状态 |
 | `service_packages` | 商品/套餐、分类、价格、数量范围 |
 | `orders` | 用户订单、执行数量、退款数量、订单状态 |
-| `payment_records` | mock/Jeepay 支付记录和通知原文 |
+| `payment_records` | mock/official 支付记录、请求、响应和通知原文 |
 | `admin_users` | 后台管理员 |
 | `audit_logs` | 后台操作审计 |
 | `security_events` | 登录、注册、下单、支付等安全事件与限流计数 |
@@ -118,90 +117,60 @@ npm run dev
 PAYMENT_PROVIDER="mock"
 ```
 
-这样可以不部署 Jeepay，用户注册/登录后下单，再在订单页点击“模拟支付成功”完成测试。
+这样可以不部署真实支付通道，用户注册/登录后下单，再在订单页点击“模拟支付成功”完成测试。
 
-本机切换 Jeepay 前先看：
+生产真实收款使用 `official-pay-gateway`，该 PHP 网关通过 `yansongda/pay` 直连微信支付和支付宝官方通道。本项目已经内置以下 `wayCode`：
 
-```text
-docs/JEEPAY_LOCAL_DEPLOYMENT.md
-```
-
-Windows + Docker Desktop 本机启动 Jeepay：
-
-```powershell
-.\scripts\windows-jeepay-compose.ps1
-```
-
-Jeepay 后台入口：
-
-```text
-运营平台：http://localhost:9227  jeepay / jeepay123
-商户系统：http://localhost:9228  先在运营平台创建商户，默认密码 jeepay666
-支付网关：http://localhost:9216
-```
-
-本机 Jeepay `.env` 示例：
-
-```env
-PAYMENT_PROVIDER="jeepay"
-APP_PUBLIC_URL="http://host.docker.internal:3000"
-JEEPAY_GATEWAY_URL="http://127.0.0.1:9216"
-JEEPAY_MCH_NO="Jeepay 商户号"
-JEEPAY_APP_ID="Jeepay 应用 ID"
-JEEPAY_APP_SECRET="Jeepay 应用密钥"
-```
-
-生产收款建议先接 Jeepay，由 Jeepay 再接微信支付官方、支付宝官方等上游通道。本项目已经内置以下 `wayCode`：
-
-| 前台支付方式 | Jeepay wayCode | 使用场景 | 上游需要开通 |
+| 前台支付方式 | wayCode | 使用场景 | 上游需要开通 |
 | --- | --- | --- | --- |
 | 微信扫码 | `WX_NATIVE` | PC 网页展示二维码，用户用微信扫码 | 微信支付 Native 支付 |
 | 微信 H5 | `WX_H5` | 手机系统浏览器拉起微信支付，不支持微信内置浏览器 | 微信支付 H5 支付 |
 | 支付宝网页 | `ALI_PC` | PC 网页跳转支付宝收银台 | 支付宝电脑网站支付 |
 | 支付宝 H5 | `ALI_WAP` | 手机浏览器跳转支付宝 App 或网页收银台 | 支付宝手机网站支付 |
 
-正式切换 Jeepay 前，需要先完成：
+正式切换 `official` 前，需要先完成：
 
-1. 独立部署 Jeepay，并确保支付网关公网可访问。
-2. 在 Jeepay 运营平台添加商户和应用，配置微信支付官方、支付宝官方通道参数。
+1. 宝塔安装 PHP 8.2+、PHP-FPM 和 Composer。
+2. 在 `official-pay-gateway` 中执行 `composer install --no-dev --optimize-autoloader`。
 3. 在微信支付商户平台申请 Native/H5 支付权限；H5 支付通常需要可公网访问的已备案支付域名、经营内容页面和场景截图。
 4. 在支付宝开放平台创建网页/移动应用，配置密钥，上线审核，并在商家平台签约电脑网站支付、手机网站支付。
-5. 将 Jeepay 商户号、应用 ID、应用密钥写入本项目 `.env`。
+5. 将微信/支付宝证书和私钥放到 `/etc/buy_web/pay-certs`，并设置最小文件权限。
+6. 配置 Nginx 只公网暴露 `/official-pay/notify/*`，内部下单接口只允许 `127.0.0.1` 访问。
 
 生产 `.env` 示例：
 
 ```env
-PAYMENT_PROVIDER="jeepay"
+PAYMENT_PROVIDER="official"
 APP_PUBLIC_URL="https://www.example.com"
-JEEPAY_GATEWAY_URL="https://pay.example.com"
-JEEPAY_MCH_NO="Jeepay 商户号"
-JEEPAY_APP_ID="Jeepay 应用 ID"
-JEEPAY_APP_SECRET="Jeepay 应用私钥"
+OFFICIAL_PAY_GATEWAY_URL="http://127.0.0.1:7301"
+OFFICIAL_PAY_GATEWAY_SECRET="至少32位随机密钥"
+PAYMENT_RECONCILE_SECRET="另一个随机密钥"
 ```
 
-本项目调用 Jeepay 统一下单接口：
+本项目调用 PHP 网关：
 
 ```text
-POST {JEEPAY_GATEWAY_URL}/api/pay/unifiedOrder
+POST {OFFICIAL_PAY_GATEWAY_URL}/payments
 ```
 
-Jeepay 支付通知回调到本项目：
+微信/支付宝先回调 PHP 网关，验签后再由 PHP 网关用内部 HMAC 转发到本项目：
 
 ```text
-{APP_PUBLIC_URL}/api/payments/jeepay/notify
+{APP_PUBLIC_URL}/official-pay/notify/*
+{APP_PUBLIC_URL}/api/payments/official/notify
 ```
 
 退款通知回调到：
 
 ```text
-{APP_PUBLIC_URL}/api/refunds/notify/jeepay
+{APP_PUBLIC_URL}/api/refunds/official/notify
 ```
 
-回调接口会校验 `mchNo`、`appId`、MD5 签名、订单号和金额，成功后只返回小写 `success`。
+内部请求使用 `timestamp.body` 做 HMAC-SHA256 签名并校验 5 分钟时间窗；官方回调由 `yansongda/pay` 按微信支付 API v3、支付宝 RSA2 或证书模式验签；Next.js 最后还会校验订单号和金额。
 
 个人申请要求要提前确认：本项目不支持个人免签、个人收款码或手工收款码替代支付接口。正式线上收款通常需要真实经营主体、已备案域名、可展示的商品/服务页面、商户号和支付产品签约权限；个人要长期稳定接入，建议先办理个体工商户或企业主体，再按微信/支付宝官方审核要求申请。
 
-支付详细配置、官方原文链接和 Jeepay 后台填写项见：
+支付详细配置、官方原文链接、证书路径、Nginx 和故障补偿见：
 
 ```text
 docs/PAYMENT_SETUP.md

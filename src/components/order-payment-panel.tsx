@@ -1,7 +1,8 @@
 "use client";
 
 import { CheckCircle2, ExternalLink, RefreshCw } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import QRCode from "qrcode";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { payMethodForWayCode, payMethodOptions, type PayMethod } from "@/lib/payment-gateway";
@@ -11,7 +12,7 @@ import { usePaymentSurface } from "@/lib/use-payment-surface";
 type Payment = {
   id: string;
   attemptNo: number;
-  provider: "MOCK" | "JEEPAY";
+  provider: "MOCK" | "JEEPAY" | "OFFICIAL";
   status: string;
   wayCode: string;
   payDataType: string | null;
@@ -19,6 +20,11 @@ type Payment = {
   providerOrderId: string | null;
   createdAt: string | Date;
   paidAt: string | Date | null;
+};
+
+type GeneratedQrCode = {
+  source: string;
+  dataUrl: string;
 };
 
 export function OrderPaymentPanel({
@@ -33,6 +39,7 @@ export function OrderPaymentPanel({
   const router = useRouter();
   const [error, setError] = useState("");
   const [payMethod, setPayMethod] = useState<PayMethod>(payMethodForWayCode(payment?.wayCode));
+  const [qrCode, setQrCode] = useState<GeneratedQrCode | null>(null);
   const [isPending, startTransition] = useTransition();
   const { isMobileSurface, isWeChatBrowser } = usePaymentSurface();
   const paid = status === "PAID" || status === "FULFILLED";
@@ -56,6 +63,41 @@ export function OrderPaymentPanel({
 
     return isMobileSurface ? "wechat_h5" : "wechat_native";
   }, [isMobileSurface, payMethod, payment?.wayCode, visiblePayMethods]);
+  const qrDataUrl = payment?.payDataType === "codeUrl" && qrCode?.source === payment.payData
+    ? qrCode.dataUrl
+    : "";
+
+  useEffect(() => {
+    if (payment?.payDataType !== "codeUrl" || !payment.payData) {
+      return;
+    }
+
+    let cancelled = false;
+    const source = payment.payData;
+
+    QRCode.toDataURL(source, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 256,
+    })
+      .then((value) => {
+        if (!cancelled) {
+          setQrCode({
+            dataUrl: value,
+            source,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQrCode(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [payment?.payData, payment?.payDataType]);
 
   function confirmMockPayment() {
     setError("");
@@ -200,13 +242,17 @@ export function OrderPaymentPanel({
         </div>
       ) : null}
 
-      {payment?.provider === "JEEPAY" ? (
+      {payment?.provider === "OFFICIAL" || payment?.provider === "JEEPAY" ? (
         <div className="form-stack">
           {payment.payDataType === "codeImgUrl" && payment.payData ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img alt="支付二维码" src={payment.payData} style={{ borderRadius: 8, width: "100%" }} />
           ) : null}
-          {(payment.payDataType === "payUrl" || payment.payDataType === "codeUrl") && payment.payData ? (
+          {payment.payDataType === "codeUrl" && qrDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img alt="微信支付二维码" src={qrDataUrl} style={{ borderRadius: 8, width: "100%" }} />
+          ) : null}
+          {(payment.payDataType === "payUrl" || (payment.payDataType === "codeUrl" && !qrDataUrl)) && payment.payData ? (
             <a className="primary-button" href={payment.payData} rel="noreferrer" target="_blank">
               <ExternalLink size={17} />
               打开支付链接

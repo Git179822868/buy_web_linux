@@ -2,8 +2,8 @@ import { Prisma } from "@prisma/client";
 import type { OrderStatus, PaymentProvider, PaymentStatus, RefundStatus } from "@prisma/client";
 
 import { paymentProvider } from "@/lib/env";
-import { JeepayGateway } from "@/lib/jeepay";
 import {
+  OfficialCompositeGateway,
   payMethodForWayCode,
   type GatewayPayNotifyResult,
   type GatewayPaymentResult,
@@ -93,11 +93,11 @@ async function generateRefundNo() {
 }
 
 function providerForCurrentMode(): PaymentProvider {
-  return paymentProvider() === "jeepay" ? "JEEPAY" : "MOCK";
+  return paymentProvider() === "official" ? "OFFICIAL" : "MOCK";
 }
 
 function realPaymentGateway(): PaymentGateway | null {
-  return paymentProvider() === "jeepay" ? new JeepayGateway() : null;
+  return paymentProvider() === "official" ? new OfficialCompositeGateway() : null;
 }
 
 function orderStatusFromPayment(currentStatus: OrderStatus, status: PaymentStatus): OrderStatus {
@@ -309,12 +309,14 @@ async function syncSinglePaymentAttempt(
   let result = await gateway.queryPayment({
     mchOrderNo: payment.mchOrderNo,
     providerOrderId: payment.providerOrderId,
+    wayCode: payment.wayCode,
   });
 
   if (options?.closeIfActive && activePaymentStatuses.has(result.status)) {
     result = await gateway.closePayment({
       mchOrderNo: payment.mchOrderNo,
       providerOrderId: payment.providerOrderId,
+      wayCode: payment.wayCode,
     });
   }
 
@@ -515,7 +517,7 @@ export async function createPaymentForOrder(input: {
     data: {
       orderId: order.id,
       attemptNo,
-      provider: "JEEPAY",
+      provider: providerForCurrentMode(),
       mchOrderNo: await generateMerchantOrderNo(),
       amountCent: order.amountCent,
       currency: order.currency,
@@ -558,7 +560,7 @@ export async function createPaymentForOrder(input: {
     return {
       order: persisted.order,
       payment: persisted.payment,
-      provider: "JEEPAY" as const,
+      provider: providerForCurrentMode(),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "拉起真实支付失败";
@@ -576,7 +578,7 @@ export async function createPaymentForOrder(input: {
     return {
       order: persisted.order,
       payment: persisted.payment,
-      provider: "JEEPAY" as const,
+      provider: providerForCurrentMode(),
     };
   }
 }
@@ -670,6 +672,61 @@ export async function syncLatestPaymentForOrder(orderNo: string) {
   }
 
   return syncSinglePaymentAttempt(paymentState);
+}
+
+export async function reconcileActiveOfficialPayments(input?: {
+  limit?: number;
+  minAgeMinutes?: number;
+}) {
+  const limit = Math.min(Math.max(input?.limit ?? 20, 1), 100);
+  const minAgeMinutes = Math.min(Math.max(input?.minAgeMinutes ?? 2, 0), 120);
+  const cutoff = new Date(Date.now() - minAgeMinutes * 60 * 1000);
+  const payments = await prisma.paymentRecord.findMany({
+    where: {
+      provider: "OFFICIAL",
+      status: {
+        in: ["CREATED", "PAYING"],
+      },
+      updatedAt: {
+        lte: cutoff,
+      },
+    },
+    include: latestPaymentInclude,
+    orderBy: {
+      updatedAt: "asc",
+    },
+    take: limit,
+  });
+  const results: Array<{
+    id: string;
+    mchOrderNo: string;
+    status?: PaymentStatus;
+    orderStatus?: OrderStatus;
+    error?: string;
+  }> = [];
+
+  for (const payment of payments) {
+    try {
+      const synced = await syncSinglePaymentAttempt(payment);
+      results.push({
+        id: payment.id,
+        mchOrderNo: payment.mchOrderNo,
+        status: synced.payment.status,
+        orderStatus: synced.order.status,
+      });
+    } catch (error) {
+      results.push({
+        id: payment.id,
+        mchOrderNo: payment.mchOrderNo,
+        error: error instanceof Error ? error.message : "支付补偿查询失败",
+      });
+    }
+  }
+
+  return {
+    checked: payments.length,
+    results,
+  };
 }
 
 export async function applyMockPaymentSuccess(orderNo: string) {
@@ -784,6 +841,7 @@ export async function createRefundForOrder(input: {
       currency: order.currency,
       reason: refundState.reason,
       clientIp: input.clientIp,
+      wayCode: payment.wayCode,
     });
 
     return persistRefundResult(refundState, result);
@@ -828,8 +886,10 @@ export async function syncRefundRecordStatus(id: string) {
   }
 
   const result = await gateway.queryRefund({
+    mchOrderNo: refund.paymentRecord.mchOrderNo,
     mchRefundNo: refund.mchRefundNo,
     providerRefundId: refund.providerRefundId,
+    wayCode: refund.paymentRecord.wayCode,
   });
 
   return persistRefundResult(refund, result);

@@ -1,0 +1,12 @@
+{
+  "name": "buy-web/official-pay-gateway",
+  "description": "Lightweight WeChat Pay and Alipay gateway for buy_web.",
+  "type": "project",
+  "require": {
+    "php": ">=8.2",
+    "yansongda/pay": "^3.7"
+  },
+  "config": {
+    "sort-packages": true
+  }
+}
