@@ -4,6 +4,7 @@
   "type": "project",
   "require": {
     "php": ">=8.2",
+    "hyperf/pimple": "^2.2",
     "yansongda/pay": "^3.7"
   },
   "config": {
