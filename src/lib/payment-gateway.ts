@@ -323,7 +323,7 @@ export class OfficialCompositeGateway implements PaymentGateway {
       wayCode: wayCodeForPayMethod(input.payMethod),
       clientIp: input.clientIp || "127.0.0.1",
       notifyUrl: `${appPublicUrl()}/api/payments/official/notify`,
-      returnUrl: `${appPublicUrl()}/order/${input.orderNo}`,
+      returnUrl: `${appPublicUrl()}/order/${input.orderNo}/payment/success`,
     });
     const data = responseData<OfficialPaymentData>(response);
 

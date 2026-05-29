@@ -222,6 +222,12 @@ export default async function OrderPage({
           <OrderPaymentPanel
             key={payment ? `${payment.id}:${payment.status}:${payment.wayCode}` : `none:${order.status}`}
             orderNo={order.orderNo}
+            order={{
+              amountCent: order.amountCent,
+              createdAt: order.createdAt,
+              currency: order.currency,
+              packageName: order.package.name,
+            }}
             payment={
               payment
                 ? {

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ExternalLink, RefreshCw } from "lucide-react";
+import { CheckCircle2, ExternalLink, RefreshCw, ScanLine } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -22,6 +22,13 @@ type Payment = {
   paidAt: string | Date | null;
 };
 
+type OrderSummary = {
+  amountCent: number;
+  currency: string;
+  packageName: string;
+  createdAt: string | Date;
+};
+
 type GeneratedQrCode = {
   source: string;
   dataUrl: string;
@@ -29,10 +36,12 @@ type GeneratedQrCode = {
 
 export function OrderPaymentPanel({
   orderNo,
+  order,
   status,
   payment,
 }: {
   orderNo: string;
+  order: OrderSummary;
   status: string;
   payment: Payment | null;
 }) {
@@ -98,6 +107,14 @@ export function OrderPaymentPanel({
       cancelled = true;
     };
   }, [payment?.payData, payment?.payDataType]);
+
+  function amountYuan() {
+    return (order.amountCent / 100).toFixed(2);
+  }
+
+  function displayDate(value: string | Date) {
+    return new Date(value).toLocaleString("zh-CN", { hour12: false });
+  }
 
   function confirmMockPayment() {
     setError("");
@@ -244,23 +261,59 @@ export function OrderPaymentPanel({
 
       {payment?.provider === "OFFICIAL" || payment?.provider === "JEEPAY" ? (
         <div className="form-stack">
-          {payment.payDataType === "codeImgUrl" && payment.payData ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img alt="支付二维码" src={payment.payData} style={{ borderRadius: 8, width: "100%" }} />
-          ) : null}
-          {payment.payDataType === "codeUrl" && qrDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img alt="微信支付二维码" src={qrDataUrl} style={{ borderRadius: 8, width: "100%" }} />
-          ) : null}
-          {(payment.payDataType === "payUrl" || (payment.payDataType === "codeUrl" && !qrDataUrl)) && payment.payData ? (
-            <a className="primary-button" href={payment.payData} rel="noreferrer" target="_blank">
-              <ExternalLink size={17} />
-              打开支付链接
-            </a>
-          ) : null}
-          {payment.payDataType === "form" && payment.payData ? (
-            <div className="payment-form" dangerouslySetInnerHTML={{ __html: payment.payData }} />
-          ) : null}
+          <div className="payment-checkout-card">
+            <div className="payment-checkout-head">
+              <strong>{amountYuan()}</strong>
+              <span>元</span>
+            </div>
+            <div className="payment-checkout-body">
+              {payment.payDataType === "codeImgUrl" && payment.payData ? (
+                <div className="payment-qr-frame">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img alt="支付二维码" src={payment.payData} />
+                </div>
+              ) : null}
+              {payment.payDataType === "codeUrl" && qrDataUrl ? (
+                <div className="payment-qr-frame">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img alt="微信支付二维码" src={qrDataUrl} />
+                </div>
+              ) : null}
+              {(payment.payDataType === "codeImgUrl" || payment.payDataType === "codeUrl") && payment.payData ? (
+                <div className="payment-scan-hint">
+                  <ScanLine size={34} />
+                  <span>
+                    手机打开微信
+                    <br />
+                    扫一扫完成支付
+                  </span>
+                </div>
+              ) : null}
+              {(payment.payDataType === "payUrl" || (payment.payDataType === "codeUrl" && !qrDataUrl)) && payment.payData ? (
+                <a className="primary-button payment-wide-action" href={payment.payData} rel="noreferrer" target="_blank">
+                  <ExternalLink size={17} />
+                  打开支付链接
+                </a>
+              ) : null}
+              {payment.payDataType === "form" && payment.payData ? (
+                <div className="payment-form" dangerouslySetInnerHTML={{ __html: payment.payData }} />
+              ) : null}
+              <div className="payment-meta-list">
+                <div>
+                  <span>商品名称</span>
+                  <strong>{order.packageName}</strong>
+                </div>
+                <div>
+                  <span>订单编号</span>
+                  <strong>{orderNo}</strong>
+                </div>
+                <div>
+                  <span>订单时间</span>
+                  <strong>{displayDate(order.createdAt)}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
           {!payment.payData ? (
             <p className="muted">当前支付尝试没有可用的二维码或跳转地址，请刷新状态或重新拉起支付。</p>
           ) : null}
