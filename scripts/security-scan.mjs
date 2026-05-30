@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const thisFile = path.resolve(fileURLToPath(import.meta.url));
-const ignoredDirs = new Set([".git", ".next", "node_modules"]);
+const ignoredDirs = new Set([".deploy", ".git", ".next", "node_modules"]);
 const scannedExtensions = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]);
 
 const forbiddenPatterns = [

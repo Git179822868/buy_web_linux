@@ -46,13 +46,12 @@ ADMIN_SEED_USERNAME="admin"
 ADMIN_SEED_PASSWORD="Admin@123456"
 ```
 
-本地测试支付时保持：
+本地测试支付也使用官方支付模式；没有商户证书时只能验证注册、登录、下单和后台，不会把订单标记为已付款：
 
 ```env
-PAYMENT_PROVIDER="mock"
+PAYMENT_PROVIDER="official"
+OFFICIAL_PAY_GATEWAY_URL="http://127.0.0.1:7301"
 ```
-
-这样不需要先部署真实支付，也能完整测试注册、登录、下单、模拟支付、后台查单。
 
 ## 后台与数据库范围
 

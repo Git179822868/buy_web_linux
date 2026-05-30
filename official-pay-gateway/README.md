@@ -66,8 +66,8 @@ network boundary.
 
 ## Go-Live Rule
 
-Keep `PAYMENT_PROVIDER=mock` until WeChat Pay and Alipay merchant credentials,
-product permissions, certificates, callback URLs, and small real-money test
-orders have all passed. A production order should only be considered paid after
-a verified callback or active query confirms order number, amount, and upstream
+Use `PAYMENT_PROVIDER=official` only with complete WeChat Pay and Alipay merchant
+credentials, product permissions, certificates, callback URLs, and small
+real-money test orders. A production order should only be considered paid after a
+verified callback or active query confirms order number, amount, and upstream
 transaction id.

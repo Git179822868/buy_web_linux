@@ -16,7 +16,7 @@
   -> Next.js API 创建订单
   -> Prisma 写入 MySQL
   -> 创建 payment_records 支付记录
-  -> mock 本地支付或 official 官方支付网关
+  -> official-pay-gateway 官方支付网关
   -> 支付成功后更新订单和支付状态
   -> 后台客服查看订单并处理
 ```
@@ -34,7 +34,6 @@
 | 登录 | Cookie + JWT + bcrypt | 用户和管理员认证 |
 | 验证码 | 签名 SVG 验证码 | 登录/注册前先校验，减少恶意写库 |
 | 安全限流 | Prisma 安全事件表 | 记录注册、登录、下单、支付查询等高风险行为 |
-| 本地支付 | mock | 不部署真实支付也能测试下单支付 |
 | 正式支付 | official-pay-gateway + yansongda/pay | 对接微信支付和支付宝官方通道 |
 | 部署 | Node.js + MySQL + Nginx | 保持部署组件最少 |
 
@@ -56,15 +55,7 @@
 
 ## 支付设计
 
-本地开发默认使用：
-
-```env
-PAYMENT_PROVIDER="mock"
-```
-
-mock 模式会创建订单和支付记录，订单页可以点击模拟支付成功，适合在没有支付网关时完成业务测试。
-
-生产环境切换为：
+支付环境变量：
 
 ```env
 PAYMENT_PROVIDER="official"

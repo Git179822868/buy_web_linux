@@ -9,6 +9,7 @@ coverage
 *.log
 logs
 .local
+.deploy
 prisma/dev.db
 *.tsbuildinfo
 public/uploads

@@ -232,13 +232,7 @@ APP_PUBLIC_URL="https://你的域名"
 TRUSTED_PROXY_COUNT="1"
 ```
 
-本地或初次测试可以保持：
-
-```env
-PAYMENT_PROVIDER="mock"
-```
-
-接入官方支付后再改：
+支付模式固定为官方收款：
 
 ```env
 PAYMENT_PROVIDER="official"
@@ -504,7 +498,7 @@ cleanup-candidates.txt
 - 宝塔 SSL 已申请成功，强制 HTTPS 和自动续签已开启
 - `AUTH_SECRET` 已换成强随机字符串
 - 备份任务已创建并手动测试过
-- mock 支付完整跑通过注册、登录、下单、后台订单
+- 注册、登录、下单、后台订单已验证；未配置真实商户证书前不会把订单标记为已付款
 - 如果切换真实收款，`official-pay-gateway` 的 `/official-pay/health` 正常
 - 如果切换真实收款，微信/支付宝回调指向 `{APP_PUBLIC_URL}/official-pay/notify/*`
 - 如果切换真实收款，`PAYMENT_RECONCILE_SECRET` 和支付补偿定时任务已配置

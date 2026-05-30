@@ -9,7 +9,7 @@
 | 网站与后台 | Next.js 16 + React 19 + TypeScript |
 | 数据库 | MySQL 8 |
 | ORM | Prisma |
-| 支付 | 本地 mock 或 yansongda/pay 官方微信/支付宝网关 |
+| 支付 | yansongda/pay 官方微信/支付宝网关 |
 | 用户登录 | 手机号 + 密码 + 验证码，HTTP-only Cookie + JWT + bcrypt |
 | 后台登录 | 独立管理员账号，HTTP-only Cookie + JWT + bcrypt |
 | 部署 | 一个 Node.js 服务 + MySQL + Nginx |
@@ -54,7 +54,7 @@ Prisma 会在 `buyweb` 数据库中创建这些核心表：
 | `users` | 用户手机号登录、余额、状态 |
 | `service_packages` | 商品/套餐、分类、价格、数量范围 |
 | `orders` | 用户订单、执行数量、退款数量、订单状态 |
-| `payment_records` | mock/official 支付记录、请求、响应和通知原文 |
+| `payment_records` | official 支付记录、请求、响应和通知原文 |
 | `admin_users` | 后台管理员 |
 | `audit_logs` | 后台操作审计 |
 | `security_events` | 登录、注册、下单、支付等安全事件与限流计数 |
@@ -111,15 +111,7 @@ npm run dev
 
 ## 支付模式
 
-本项目有两种支付运行模式：
-
-```env
-PAYMENT_PROVIDER="mock"
-```
-
-这样可以不部署真实支付通道，用户注册/登录后下单，再在订单页点击“模拟支付成功”完成测试。
-
-生产真实收款使用 `official-pay-gateway`，该 PHP 网关通过 `yansongda/pay` 直连微信支付和支付宝官方通道。本项目已经内置以下 `wayCode`：
+本项目只保留真实收款模式。`official-pay-gateway` 通过 `yansongda/pay` 直连微信支付和支付宝官方通道。本项目已经内置以下 `wayCode`：
 
 | 前台支付方式 | wayCode | 使用场景 | 上游需要开通 |
 | --- | --- | --- | --- |
@@ -128,7 +120,7 @@ PAYMENT_PROVIDER="mock"
 | 支付宝网页 | `ALI_PC` | PC 网页跳转支付宝收银台 | 支付宝电脑网站支付 |
 | 支付宝 H5 | `ALI_WAP` | 手机浏览器跳转支付宝 App 或网页收银台 | 支付宝手机网站支付 |
 
-正式切换 `official` 前，需要先完成：
+正式收款前，需要先完成：
 
 1. 宝塔安装 PHP 8.2+、PHP-FPM 和 Composer。
 2. 在 `official-pay-gateway` 中执行 `composer install --no-dev --optimize-autoloader`。

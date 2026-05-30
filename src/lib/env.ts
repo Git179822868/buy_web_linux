@@ -12,14 +12,14 @@ export function appPublicUrl() {
   return (process.env.APP_PUBLIC_URL || "http://localhost:3000").replace(/\/$/, "");
 }
 
-export type PaymentProviderMode = "mock" | "official";
+export type PaymentProviderMode = "official";
 
 export function paymentProvider() {
   const provider = process.env.PAYMENT_PROVIDER?.toLowerCase();
 
-  if (provider === "official") {
+  if (!provider || provider === "official") {
     return "official";
   }
 
-  return "mock";
+  throw new Error("PAYMENT_PROVIDER must be official. Mock payment mode has been disabled.");
 }

@@ -1,6 +1,6 @@
 # 官方收款配置手册
 
-本文说明如何把 `buy_web` 从模拟支付切换到轻量真实收款。新方案不再部署 Jeepay、Docker、RocketMQ 或 Java 支付中台，而是在宝塔 PHP 8.2+ / PHP-FPM 下运行 `official-pay-gateway`，通过 `yansongda/pay` 直连微信支付和支付宝官方通道。
+本文说明如何配置 `buy_web` 的轻量真实收款。新方案不再部署 Jeepay、Docker、RocketMQ 或 Java 支付中台，而是在宝塔 PHP 8.2+ / PHP-FPM 下运行 `official-pay-gateway`，通过 `yansongda/pay` 直连微信支付和支付宝官方通道。
 
 ## 官方资料
 
@@ -38,12 +38,6 @@
 | 支付宝 H5 | `ALI_WAP` | 支付宝手机网站支付 |
 
 ## 环境变量
-
-模拟支付：
-
-```env
-PAYMENT_PROVIDER="mock"
-```
 
 真实收款：
 

@@ -28,8 +28,9 @@ calls, upstream callback verification, and internal HMAC forwarding.
 
 ## Install Flow
 
-1. Keep the site in mock mode and verify registration, login, ordering, admin
-   order list, and SSL first.
+1. Keep the site in official mode. Verify registration, login, ordering, admin
+   order list, and SSL first; payment attempts will fail closed until merchant
+   credentials are configured.
 2. Install PHP 8.2+ and Composer in Baota.
 3. Run:
 
@@ -79,13 +80,8 @@ reconciliation, refund creation, refund query, and refund callback.
 
 ## Rollback
 
-Set:
-
-```env
-PAYMENT_PROVIDER="mock"
-```
-
-Then restart PM2:
+Restore the previous release and restart PM2. Do not switch production orders to
+a local payment simulator.
 
 ```bash
 pm2 restart buyweb --update-env

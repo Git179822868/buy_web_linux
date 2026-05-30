@@ -1,7 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { OrderStatus, PaymentProvider, PaymentStatus, RefundStatus } from "@prisma/client";
 
-import { paymentProvider } from "@/lib/env";
 import {
   OfficialCompositeGateway,
   payMethodForWayCode,
@@ -93,11 +92,11 @@ async function generateRefundNo() {
 }
 
 function providerForCurrentMode(): PaymentProvider {
-  return paymentProvider() === "official" ? "OFFICIAL" : "MOCK";
+  return "OFFICIAL";
 }
 
-function realPaymentGateway(): PaymentGateway | null {
-  return paymentProvider() === "official" ? new OfficialCompositeGateway() : null;
+function realPaymentGateway(): PaymentGateway {
+  return new OfficialCompositeGateway();
 }
 
 function orderStatusFromPayment(currentStatus: OrderStatus, status: PaymentStatus): OrderStatus {
@@ -265,7 +264,7 @@ async function persistPaymentResult(
   });
 }
 
-function paymentResultFromMockStatus(status: PaymentStatus, payment: PaymentState): GatewayPaymentResult {
+function paymentResultFromExistingPayment(status: PaymentStatus, payment: PaymentState): GatewayPaymentResult {
   return {
     providerOrderId: payment.providerOrderId,
     status,
@@ -286,9 +285,9 @@ async function syncSinglePaymentAttempt(
     };
   }
 
-  if (payment.provider === "MOCK") {
+  if (payment.provider !== "OFFICIAL") {
     if (options?.closeIfActive) {
-      return persistPaymentResult(payment, paymentResultFromMockStatus("CLOSED", payment));
+      return persistPaymentResult(payment, paymentResultFromExistingPayment("CLOSED", payment));
     }
 
     return {
@@ -429,36 +428,6 @@ async function persistRefundResult(
   });
 }
 
-async function createMockPaymentAttempt(order: OrderPaymentState, attemptNo: number, payMethod: PayMethod) {
-  const payment = await prisma.paymentRecord.create({
-    data: {
-      orderId: order.id,
-      attemptNo,
-      provider: "MOCK",
-      mchOrderNo: await generateMerchantOrderNo(),
-      amountCent: order.amountCent,
-      currency: order.currency,
-      wayCode: wayCodeForPayMethod(payMethod),
-      payDataType: "mock",
-      payData: `/order/${order.orderNo}`,
-      status: "CREATED",
-    },
-  });
-
-  const updatedOrder = await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      status: "PAYING",
-    },
-  });
-
-  return {
-    order: updatedOrder,
-    payment,
-    provider: "MOCK" as const,
-  };
-}
-
 export function getClientIp(request: Request) {
   return getSecurityClientIp(request);
 }
@@ -509,10 +478,6 @@ export async function createPaymentForOrder(input: {
   const payMethod = input.payMethod || payMethodForWayCode(latestPayment?.wayCode);
   const attemptNo = (order.paymentRecords[0]?.attemptNo || 0) + 1;
 
-  if (providerForCurrentMode() === "MOCK") {
-    return createMockPaymentAttempt(order, attemptNo, payMethod);
-  }
-
   const payment = await prisma.paymentRecord.create({
     data: {
       orderId: order.id,
@@ -533,10 +498,6 @@ export async function createPaymentForOrder(input: {
   }
 
   const gateway = realPaymentGateway();
-
-  if (!gateway) {
-    throw new Error("未找到可用的支付网关");
-  }
 
   try {
     const targetLabel = order.package.category === "xhs" || order.package.categoryLabel.includes("小红书") ? "红薯账号" : "抖音号";
@@ -729,32 +690,6 @@ export async function reconcileActiveOfficialPayments(input?: {
   };
 }
 
-export async function applyMockPaymentSuccess(orderNo: string) {
-  if (providerForCurrentMode() !== "MOCK") {
-    throw new Error("生产支付模式不可使用模拟确认");
-  }
-
-  const order = await loadOrderPaymentState(orderNo);
-
-  if (!order) {
-    throw new Error("订单不存在");
-  }
-
-  const latestPayment = order.paymentRecords[0];
-
-  if (!latestPayment) {
-    throw new Error("订单暂无支付记录");
-  }
-
-  const paymentState = await loadPaymentState(latestPayment.id);
-
-  if (!paymentState) {
-    throw new Error("支付记录不存在");
-  }
-
-  return persistPaymentResult(paymentState, paymentResultFromMockStatus("PAID", paymentState));
-}
-
 export async function createRefundForOrder(input: {
   orderId: string;
   amountCent?: number;
@@ -817,19 +752,11 @@ export async function createRefundForOrder(input: {
     throw new Error("退款记录不存在");
   }
 
-  if (payment.provider === "MOCK") {
-    return persistRefundResult(refundState, {
-      providerRefundId: refundState.providerRefundId,
-      status: "SUCCESS",
-      refundedAt: new Date(),
-    });
+  if (payment.provider !== "OFFICIAL") {
+    throw new Error("历史非官方支付记录不可通过线上通道退款");
   }
 
   const gateway = realPaymentGateway();
-
-  if (!gateway) {
-    throw new Error("未找到可用的支付网关");
-  }
 
   try {
     const result = await gateway.createRefund({
@@ -872,7 +799,7 @@ export async function syncRefundRecordStatus(id: string) {
     };
   }
 
-  if (refund.provider === "MOCK") {
+  if (refund.provider !== "OFFICIAL") {
     return {
       refund,
       order: refund.order,

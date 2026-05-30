@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ExternalLink, RefreshCw, ScanLine } from "lucide-react";
+import { ExternalLink, RefreshCw, ScanLine } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -12,7 +12,7 @@ import { usePaymentSurface } from "@/lib/use-payment-surface";
 type Payment = {
   id: string;
   attemptNo: number;
-  provider: "MOCK" | "JEEPAY" | "OFFICIAL";
+  provider: string;
   status: string;
   wayCode: string;
   payDataType: string | null;
@@ -114,25 +114,6 @@ export function OrderPaymentPanel({
 
   function displayDate(value: string | Date) {
     return new Date(value).toLocaleString("zh-CN", { hour12: false });
-  }
-
-  function confirmMockPayment() {
-    setError("");
-    startTransition(async () => {
-      const response = await fetch("/api/payments/mock/confirm", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ orderNo }),
-      });
-      const json = await response.json();
-
-      if (!response.ok) {
-        setError(json.message || "模拟支付失败");
-        return;
-      }
-
-      router.refresh();
-    });
   }
 
   function queryPayment() {
@@ -242,23 +223,6 @@ export function OrderPaymentPanel({
         ) : null}
       </div>
 
-      {payment?.provider === "MOCK" ? (
-        <div className="form-stack">
-          <p className="muted">本地开发默认使用模拟支付，不需要真实微信或支付宝配置。</p>
-          {error ? <p className="error-text">{error}</p> : null}
-          <div className="button-row">
-            <button className="primary-button" disabled={isPending} onClick={confirmMockPayment} type="button">
-              <CheckCircle2 size={17} />
-              {isPending ? "正在确认" : "模拟支付成功"}
-            </button>
-            <button className="secondary-button" disabled={isPending} onClick={retryPayment} type="button">
-              <RefreshCw size={17} />
-              重新生成支付
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       {payment?.provider === "OFFICIAL" || payment?.provider === "JEEPAY" ? (
         <div className="form-stack">
           <div className="payment-checkout-card">
@@ -337,6 +301,16 @@ export function OrderPaymentPanel({
           <button className="primary-button" disabled={isPending} onClick={retryPayment} type="button">
             <RefreshCw size={17} />
             创建支付尝试
+          </button>
+        </div>
+      ) : null}
+      {payment && payment.provider !== "OFFICIAL" && payment.provider !== "JEEPAY" ? (
+        <div className="form-stack">
+          <p className="muted">当前订单存在旧支付记录，请重新拉起官方支付。</p>
+          {error ? <p className="error-text">{error}</p> : null}
+          <button className="primary-button" disabled={isPending} onClick={retryPayment} type="button">
+            <RefreshCw size={17} />
+            重新拉起支付
           </button>
         </div>
       ) : null}
