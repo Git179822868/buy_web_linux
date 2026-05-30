@@ -136,6 +136,8 @@ PAYMENT_PROVIDER="official"
 APP_PUBLIC_URL="https://www.example.com"
 OFFICIAL_PAY_GATEWAY_URL="http://127.0.0.1:7301"
 OFFICIAL_PAY_GATEWAY_SECRET="至少32位随机密钥"
+OFFICIAL_PAY_GATEWAY_ENCRYPTION_KEY="openssl rand -base64 32 生成的32字节密钥"
+OFFICIAL_PAY_GATEWAY_TIMEOUT_MS="10000"
 PAYMENT_RECONCILE_SECRET="另一个随机密钥"
 ```
 
@@ -145,7 +147,7 @@ PAYMENT_RECONCILE_SECRET="另一个随机密钥"
 POST {OFFICIAL_PAY_GATEWAY_URL}/payments
 ```
 
-微信/支付宝先回调 PHP 网关，验签后再由 PHP 网关用内部 HMAC 转发到本项目：
+微信/支付宝先回调 PHP 网关，验签后再由 PHP 网关用内部 AES-256-GCM 加密和 HMAC 签名转发到本项目：
 
 ```text
 {APP_PUBLIC_URL}/official-pay/notify/*
@@ -158,7 +160,7 @@ POST {OFFICIAL_PAY_GATEWAY_URL}/payments
 {APP_PUBLIC_URL}/api/refunds/official/notify
 ```
 
-内部请求使用 `timestamp.body` 做 HMAC-SHA256 签名并校验 5 分钟时间窗；官方回调由 `yansongda/pay` 按微信支付 API v3、支付宝 RSA2 或证书模式验签；Next.js 最后还会校验订单号和金额。
+内部请求先用 AES-256-GCM 加密 JSON body，再用 `timestamp.encryptedBody` 做 HMAC-SHA256 签名并校验 5 分钟时间窗；官方回调由 `yansongda/pay` 按微信支付 API v3、支付宝 RSA2 或证书模式验签；Next.js 最后还会校验订单号和金额。支付平台或 PHP 网关不可用时，本次支付尝试会快速写为失败并提示用户重新支付，不会展示二维码或误标已支付。
 
 个人申请要求要提前确认：本项目不支持个人免签、个人收款码或手工收款码替代支付接口。正式线上收款通常需要真实经营主体、已备案域名、可展示的商品/服务页面、商户号和支付产品签约权限；个人要长期稳定接入，建议先办理个体工商户或企业主体，再按微信/支付宝官方审核要求申请。
 

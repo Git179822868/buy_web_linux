@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { paymentFailureReason } from "@/lib/payment-failure";
 import { createPaymentForOrder, getClientIp } from "@/lib/purchase";
 import { prisma } from "@/lib/prisma";
 import {
@@ -98,6 +99,7 @@ export async function POST(
         payDataType: result.payment.payDataType,
         payData: result.payment.payData,
         providerOrderId: result.payment.providerOrderId,
+        failureReason: paymentFailureReason(result.payment.rawResponseJson),
       },
     });
   } catch (error) {

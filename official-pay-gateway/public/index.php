@@ -39,14 +39,14 @@ try {
         handle_channel_notify($path, $appConfig);
     }
 
-    $payload = read_signed_json($appConfig['gateway_secret']);
+    $payload = read_signed_json($appConfig['gateway_secret'], $appConfig['gateway_encryption_key'] ?? '');
 
     match ($path) {
         '/payments' => response(create_payment($payload, $appConfig)),
-        '/payments/query' => response(query_payment($payload)),
-        '/payments/close' => response(close_payment($payload)),
+        '/payments/query' => response(query_payment($payload, $appConfig)),
+        '/payments/close' => response(close_payment($payload, $appConfig)),
         '/refunds' => response(create_refund($payload, $appConfig)),
-        '/refunds/query' => response(query_refund($payload)),
+        '/refunds/query' => response(query_refund($payload, $appConfig)),
         default => response(['ok' => false, 'message' => 'Not found'], 404),
     };
 } catch (Throwable $error) {
@@ -71,7 +71,139 @@ function sign_body(string $secret, string $timestamp, string $body): string
     return hash_hmac('sha256', $timestamp . '.' . $body, $secret);
 }
 
-function read_signed_json(string $secret): array
+function base64url_encode_bin(string $value): string
+{
+    return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+}
+
+function base64url_decode_bin(string $value, string $field): string
+{
+    if (!preg_match('/^[A-Za-z0-9_-]+={0,2}$/', $value)) {
+        throw new RuntimeException('Invalid encrypted payload ' . $field);
+    }
+
+    $normalized = strtr($value, '-_', '+/');
+    $padded = str_pad($normalized, (int) (ceil(strlen($normalized) / 4) * 4), '=', STR_PAD_RIGHT);
+    $decoded = base64_decode($padded, true);
+
+    if ($decoded === false) {
+        throw new RuntimeException('Invalid encrypted payload ' . $field);
+    }
+
+    return $decoded;
+}
+
+function internal_encryption_key(string $secret): string
+{
+    $value = trim($secret);
+
+    if (preg_match('/^[a-f0-9]{64}$/i', $value)) {
+        $decoded = hex2bin($value);
+
+        if ($decoded !== false) {
+            return $decoded;
+        }
+    }
+
+    if (preg_match('/^[A-Za-z0-9+\/_-]+={0,2}$/', $value)) {
+        $normalized = strtr($value, '-_', '+/');
+        $padded = str_pad($normalized, (int) (ceil(strlen($normalized) / 4) * 4), '=', STR_PAD_RIGHT);
+        $decoded = base64_decode($padded, true);
+
+        if ($decoded !== false && strlen($decoded) === 32) {
+            return $decoded;
+        }
+    }
+
+    if (strlen($value) === 32) {
+        return $value;
+    }
+
+    throw new RuntimeException('CONFIG_MISSING: invalid internal encryption key');
+}
+
+function encrypt_internal_payload(array $payload, string $keySecret): string
+{
+    $key = internal_encryption_key($keySecret);
+    $nonce = random_bytes(12);
+    $tag = '';
+    $plaintext = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    if ($plaintext === false) {
+        throw new RuntimeException('Failed to encode internal payload');
+    }
+
+    $ciphertext = openssl_encrypt(
+        $plaintext,
+        'aes-256-gcm',
+        $key,
+        OPENSSL_RAW_DATA,
+        $nonce,
+        $tag,
+        'buy_web:official-pay:v1',
+        16
+    );
+
+    if ($ciphertext === false) {
+        throw new RuntimeException('Failed to encrypt internal payload');
+    }
+
+    $body = json_encode([
+        'v' => 1,
+        'kid' => 'primary',
+        'alg' => 'AES-256-GCM',
+        'nonce' => base64url_encode_bin($nonce),
+        'ciphertext' => base64url_encode_bin($ciphertext),
+        'tag' => base64url_encode_bin($tag),
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    if ($body === false) {
+        throw new RuntimeException('Failed to encode encrypted envelope');
+    }
+
+    return $body;
+}
+
+function decrypt_internal_payload(string $body, string $keySecret): array
+{
+    $envelope = json_decode($body, true);
+
+    if (
+        !is_array($envelope)
+        || ($envelope['v'] ?? null) !== 1
+        || ($envelope['kid'] ?? null) !== 'primary'
+        || ($envelope['alg'] ?? null) !== 'AES-256-GCM'
+        || !is_string($envelope['nonce'] ?? null)
+        || !is_string($envelope['ciphertext'] ?? null)
+        || !is_string($envelope['tag'] ?? null)
+    ) {
+        throw new RuntimeException('Invalid encrypted payload envelope');
+    }
+
+    $plaintext = openssl_decrypt(
+        base64url_decode_bin($envelope['ciphertext'], 'ciphertext'),
+        'aes-256-gcm',
+        internal_encryption_key($keySecret),
+        OPENSSL_RAW_DATA,
+        base64url_decode_bin($envelope['nonce'], 'nonce'),
+        base64url_decode_bin($envelope['tag'], 'tag'),
+        'buy_web:official-pay:v1'
+    );
+
+    if ($plaintext === false) {
+        throw new RuntimeException('Invalid encrypted payload');
+    }
+
+    $payload = json_decode($plaintext, true);
+
+    if (!is_array($payload)) {
+        throw new RuntimeException('Encrypted payload must contain a JSON object');
+    }
+
+    return $payload;
+}
+
+function read_signed_json(string $secret, string $encryptionKey): array
 {
     $body = read_raw_body();
     $timestamp = $_SERVER['HTTP_X_BUY_WEB_TIMESTAMP'] ?? '';
@@ -89,18 +221,12 @@ function read_signed_json(string $secret): array
         throw new RuntimeException('Invalid internal signature');
     }
 
-    $payload = json_decode($body, true);
-
-    if (!is_array($payload)) {
-        throw new RuntimeException('Invalid JSON body');
-    }
-
-    return $payload;
+    return decrypt_internal_payload($body, $encryptionKey);
 }
 
-function signed_post(string $url, array $payload, string $secret): void
+function signed_post(string $url, array $payload, string $secret, string $encryptionKey): void
 {
-    $body = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $body = encrypt_internal_payload($payload, $encryptionKey);
     $timestamp = (string) floor(microtime(true) * 1000);
     $signature = sign_body($secret, $timestamp, $body);
     $context = stream_context_create([
@@ -162,6 +288,42 @@ function alipay_refund_query_action_from_way_code(string $wayCode): string
     return $wayCode === 'ALI_WAP' ? 'refund_h5' : 'refund_web';
 }
 
+function require_config_value(array $config, string $key, string $label): void
+{
+    if (trim((string) ($config[$key] ?? '')) === '') {
+        throw new RuntimeException('CONFIG_MISSING: ' . $label . ' is not configured');
+    }
+}
+
+function require_readable_config_file(array $config, string $key, string $label): void
+{
+    $path = trim((string) ($config[$key] ?? ''));
+
+    if ($path === '' || !is_readable($path)) {
+        throw new RuntimeException('CONFIG_MISSING: ' . $label . ' is not readable');
+    }
+}
+
+function assert_channel_config(array $appConfig, string $wayCode): void
+{
+    if (str_starts_with($wayCode, 'ALI')) {
+        $alipay = $appConfig['alipay'] ?? [];
+        require_config_value($alipay, 'app_id', 'Alipay app_id');
+        require_readable_config_file($alipay, 'app_secret_cert', 'Alipay app private key');
+        require_readable_config_file($alipay, 'alipay_public_cert_path', 'Alipay public certificate');
+        require_readable_config_file($alipay, 'app_public_cert_path', 'Alipay app public certificate');
+        require_readable_config_file($alipay, 'alipay_root_cert_path', 'Alipay root certificate');
+        return;
+    }
+
+    $wechat = $appConfig['wechat'] ?? [];
+    require_config_value($wechat, 'mch_id', 'WeChat Pay merchant id');
+    require_config_value($wechat, 'mch_secret_key', 'WeChat Pay API v3 key');
+    require_config_value($wechat, 'mp_app_id', 'WeChat Pay app id');
+    require_readable_config_file($wechat, 'mch_secret_cert', 'WeChat Pay merchant private key');
+    require_readable_config_file($wechat, 'mch_public_cert_path', 'WeChat Pay platform certificate');
+}
+
 function create_payment(array $payload, array $appConfig): array
 {
     $wayCode = (string) ($payload['wayCode'] ?? '');
@@ -172,6 +334,8 @@ function create_payment(array $payload, array $appConfig): array
     if ($mchOrderNo === '' || $amountCent <= 0) {
         throw new RuntimeException('Invalid payment payload');
     }
+
+    assert_channel_config($appConfig, $wayCode);
 
     if ($wayCode === 'WX_NATIVE') {
         $result = Pay::wechat()->scan([
@@ -233,10 +397,11 @@ function ok_payment(string $providerOrderId, string $status, string $payDataType
     ];
 }
 
-function query_payment(array $payload): array
+function query_payment(array $payload, array $appConfig): array
 {
     $mchOrderNo = (string) ($payload['mchOrderNo'] ?? '');
     $wayCode = (string) ($payload['wayCode'] ?? '');
+    assert_channel_config($appConfig, $wayCode);
     $result = str_starts_with($wayCode, 'ALI')
         ? Pay::alipay()->query([
             'out_trade_no' => $mchOrderNo,
@@ -255,10 +420,11 @@ function query_payment(array $payload): array
     ]];
 }
 
-function close_payment(array $payload): array
+function close_payment(array $payload, array $appConfig): array
 {
     $mchOrderNo = (string) ($payload['mchOrderNo'] ?? '');
     $wayCode = (string) ($payload['wayCode'] ?? '');
+    assert_channel_config($appConfig, $wayCode);
     if (str_starts_with($wayCode, 'ALI')) {
         Pay::alipay()->close([
             'out_trade_no' => $mchOrderNo,
@@ -288,6 +454,7 @@ function create_refund(array $payload, array $appConfig): array
     }
 
     $wayCode = (string) ($payload['wayCode'] ?? '');
+    assert_channel_config($appConfig, $wayCode);
     $result = str_starts_with($wayCode, 'ALI')
         ? Pay::alipay()->refund([
             'out_trade_no' => $mchOrderNo,
@@ -316,11 +483,12 @@ function create_refund(array $payload, array $appConfig): array
     ]];
 }
 
-function query_refund(array $payload): array
+function query_refund(array $payload, array $appConfig): array
 {
     $mchRefundNo = (string) ($payload['mchRefundNo'] ?? '');
     $mchOrderNo = (string) ($payload['mchOrderNo'] ?? '');
     $wayCode = (string) ($payload['wayCode'] ?? '');
+    assert_channel_config($appConfig, $wayCode);
 
     if (str_starts_with($wayCode, 'ALI') && $mchOrderNo === '') {
         throw new RuntimeException('Missing mchOrderNo for Alipay refund query');
@@ -373,7 +541,7 @@ function handle_channel_notify(string $path, array $appConfig): never
             'paidAt' => $data['success_time'] ?? $data['gmt_payment'] ?? null,
         ];
 
-    signed_post($notifyUrl, $payload, $appConfig['gateway_secret']);
+    signed_post($notifyUrl, $payload, $appConfig['gateway_secret'], $appConfig['gateway_encryption_key'] ?? '');
     echo $channel === 'alipay' ? 'success' : json_encode(['code' => 'SUCCESS', 'message' => 'success']);
     exit;
 }

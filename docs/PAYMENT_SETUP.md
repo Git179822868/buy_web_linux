@@ -26,7 +26,7 @@
   -> 微信支付 / 支付宝
 ```
 
-`buy_web` 仍然拥有订单、支付记录、退款记录和后台状态。PHP 网关只负责调用官方支付 SDK、验签上游回调，并把验签后的结果用内部 HMAC 转发回 Next.js。
+`buy_web` 仍然拥有订单、支付记录、退款记录和后台状态。PHP 网关只负责调用官方支付 SDK、验签上游回调，并把验签后的结果用内部 AES-256-GCM 加密和 HMAC 签名转发回 Next.js。
 
 当前前台支付方式：
 
@@ -46,10 +46,12 @@ PAYMENT_PROVIDER="official"
 APP_PUBLIC_URL="https://ahyichen.cn"
 OFFICIAL_PAY_GATEWAY_URL="http://127.0.0.1:7301"
 OFFICIAL_PAY_GATEWAY_SECRET="替换为至少32位随机密钥"
+OFFICIAL_PAY_GATEWAY_ENCRYPTION_KEY="使用 openssl rand -base64 32 生成"
+OFFICIAL_PAY_GATEWAY_TIMEOUT_MS="10000"
 PAYMENT_RECONCILE_SECRET="替换为另一个随机密钥"
 ```
 
-`OFFICIAL_PAY_GATEWAY_SECRET` 用于 Next.js 和 PHP 网关之间的 HMAC-SHA256 签名。`PAYMENT_RECONCILE_SECRET` 用于受保护的支付补偿接口。
+`OFFICIAL_PAY_GATEWAY_SECRET` 用于 Next.js 和 PHP 网关之间的 HMAC-SHA256 签名。`OFFICIAL_PAY_GATEWAY_ENCRYPTION_KEY` 用于内部 JSON 请求体和回调转发体的 AES-256-GCM 加密，必须与 PHP 网关的 `BUY_WEB_GATEWAY_ENCRYPTION_KEY` 一致。`PAYMENT_RECONCILE_SECRET` 用于受保护的支付补偿接口。
 
 ## PHP 网关安装
 
@@ -88,6 +90,7 @@ find /etc/buy_web/pay-certs -type f -exec chmod 640 {} \;
 
 ```env
 BUY_WEB_GATEWAY_SECRET="必须与 OFFICIAL_PAY_GATEWAY_SECRET 一致"
+BUY_WEB_GATEWAY_ENCRYPTION_KEY="必须与 OFFICIAL_PAY_GATEWAY_ENCRYPTION_KEY 一致"
 OFFICIAL_PAY_PUBLIC_BASE_URL="https://ahyichen.cn/official-pay"
 BUY_WEB_BASE_URL="https://ahyichen.cn"
 
@@ -133,16 +136,16 @@ location ^~ /official-pay/health {
 
 ## 加密与验签
 
-- Next.js 调 PHP 网关：`x-buy-web-timestamp` + `x-buy-web-signature`，签名内容是 `timestamp.body`，算法 HMAC-SHA256，服务端校验 5 分钟时间窗。
+- Next.js 调 PHP 网关：先用 AES-256-GCM 加密 JSON 请求体，再发送 `x-buy-web-timestamp` + `x-buy-web-signature`，签名内容是 `timestamp.encryptedBody`，算法 HMAC-SHA256，服务端校验 5 分钟时间窗。
 - PHP 网关收微信/支付宝回调：由 `yansongda/pay` 按微信支付 API v3、支付宝 RSA2 或证书模式验签。
-- PHP 网关转发给 Next.js：继续使用同一套 HMAC-SHA256，Next.js 验签后才调用 `handlePayNotify` 或 `handleRefundNotify`。
+- PHP 网关转发给 Next.js：使用同一套 AES-256-GCM envelope 和 HMAC-SHA256，Next.js 验签、解密后才调用 `handlePayNotify` 或 `handleRefundNotify`。
 - Next.js 最终还会核对本地订单号和金额，不匹配不会改订单状态。
 
-运行时必须能读取明文私钥。不要把“加密保存密钥”当作主要安全措施；本项目的安全边界是文件权限、HTTPS、HMAC、官方验签、最小暴露面和备份加密。
+运行时必须能读取明文私钥。不要把“加密保存密钥”当作主要安全措施；本项目的安全边界是文件权限、HTTPS、内部 AES-GCM、HMAC、官方验签、最小暴露面和备份加密。
 
 ## 故障补偿
 
-支付平台、PHP 网关或网络短暂不可用时，系统不删除支付流水，也不会因为超时把订单标记为已支付。只有签名回调或主动查单确认后，订单才会变为 `PAID`。
+支付平台、PHP 网关或网络不可用时，本次创建支付会快速返回失败：本地支付流水写为 `FAILED`，订单写为 `PAYMENT_FAILED`，前台显示“支付失败，请稍后重试”，并允许用户重新支付。失败流水保留 `CONFIG_MISSING`、`TIMEOUT` 或 `UPSTREAM_UNAVAILABLE` 摘要用于排查。只有签名回调或主动查单确认后，订单才会变为 `PAID`。
 
 补偿接口：
 

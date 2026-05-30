@@ -2,6 +2,7 @@
 
 return [
     'gateway_secret' => getenv('BUY_WEB_GATEWAY_SECRET') ?: 'replace-with-a-long-random-secret',
+    'gateway_encryption_key' => getenv('BUY_WEB_GATEWAY_ENCRYPTION_KEY') ?: 'replace-with-32-byte-base64-key',
     'public_base_url' => getenv('OFFICIAL_PAY_PUBLIC_BASE_URL') ?: 'https://example.com/official-pay',
     'buy_web_base_url' => getenv('BUY_WEB_BASE_URL') ?: 'https://example.com',
     'wechat' => [

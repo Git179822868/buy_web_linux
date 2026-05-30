@@ -2,7 +2,7 @@
 
 import { ExternalLink, RefreshCw, ScanLine } from "lucide-react";
 import QRCode from "qrcode";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { payMethodForWayCode, payMethodOptions, type PayMethod } from "@/lib/payment-gateway";
@@ -12,6 +12,7 @@ import { usePaymentSurface } from "@/lib/use-payment-surface";
 type Payment = {
   id: string;
   attemptNo: number;
+  failureReason: string | null;
   provider: string;
   status: string;
   wayCode: string;
@@ -50,8 +51,10 @@ export function OrderPaymentPanel({
   const [payMethod, setPayMethod] = useState<PayMethod>(payMethodForWayCode(payment?.wayCode));
   const [qrCode, setQrCode] = useState<GeneratedQrCode | null>(null);
   const [isPending, startTransition] = useTransition();
+  const paymentFormRef = useRef<HTMLDivElement | null>(null);
   const { isMobileSurface, isWeChatBrowser } = usePaymentSurface();
   const paid = status === "PAID" || status === "FULFILLED";
+  const paymentFailed = status === "PAYMENT_FAILED" || payment?.status === "FAILED";
   const refundPending = status === "REFUND_PENDING";
   const refunded = status === "REFUNDED";
   const visiblePayMethods = useMemo(() => {
@@ -148,8 +151,24 @@ export function OrderPaymentPanel({
         return;
       }
 
+      if (json.payment?.status === "FAILED") {
+        setError(json.payment.failureReason || "支付失败，请稍后重试");
+      }
+
       router.refresh();
     });
+  }
+
+  function submitEmbeddedPaymentForm() {
+    const form = paymentFormRef.current?.querySelector("form");
+
+    if (!form) {
+      setError("当前支付表单不可用，请重新支付。");
+      return;
+    }
+
+    form.setAttribute("target", "_blank");
+    form.submit();
   }
 
   if (refundPending) {
@@ -200,7 +219,7 @@ export function OrderPaymentPanel({
       </div>
 
       <div className="field" style={{ marginTop: 12 }}>
-        <label>重新拉起时使用</label>
+        <label>选择支付方式</label>
         <div className="checkout-method-grid compact">
           {visiblePayMethods.map((method) => (
             <button
@@ -223,7 +242,41 @@ export function OrderPaymentPanel({
         ) : null}
       </div>
 
-      {payment?.provider === "OFFICIAL" || payment?.provider === "JEEPAY" ? (
+      {paymentFailed ? (
+        <div className="form-stack">
+          <div className="payment-failure-card">
+            <strong>支付失败</strong>
+            <p>{payment?.failureReason || "支付通道暂时不可用，请稍后重试。"}</p>
+            <div className="payment-meta-list">
+              <div>
+                <span>订单编号</span>
+                <strong>{orderNo}</strong>
+              </div>
+              <div>
+                <span>支付尝试</span>
+                <strong>{payment ? `第 ${payment.attemptNo} 次` : "-"}</strong>
+              </div>
+              <div>
+                <span>失败时间</span>
+                <strong>{payment ? displayDate(payment.createdAt) : "-"}</strong>
+              </div>
+            </div>
+          </div>
+          {error ? <p className="error-text">{error}</p> : null}
+          <div className="button-row">
+            <button className="secondary-button" disabled={isPending} onClick={queryPayment} type="button">
+              <RefreshCw size={17} />
+              刷新状态
+            </button>
+            <button className="primary-button" disabled={isPending} onClick={retryPayment} type="button">
+              <RefreshCw size={17} />
+              重新支付
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {!paymentFailed && (payment?.provider === "OFFICIAL" || payment?.provider === "JEEPAY") ? (
         <div className="form-stack">
           <div className="payment-checkout-card">
             <div className="payment-checkout-head">
@@ -260,7 +313,13 @@ export function OrderPaymentPanel({
                 </a>
               ) : null}
               {payment.payDataType === "form" && payment.payData ? (
-                <div className="payment-form" dangerouslySetInnerHTML={{ __html: payment.payData }} />
+                <>
+                  <div ref={paymentFormRef} className="payment-form" dangerouslySetInnerHTML={{ __html: payment.payData }} />
+                  <button className="primary-button payment-wide-action" onClick={submitEmbeddedPaymentForm} type="button">
+                    <ExternalLink size={17} />
+                    前往支付宝支付
+                  </button>
+                </>
               ) : null}
               <div className="payment-meta-list">
                 <div>
@@ -289,7 +348,7 @@ export function OrderPaymentPanel({
             </button>
             <button className="primary-button" disabled={isPending} onClick={retryPayment} type="button">
               <RefreshCw size={17} />
-              重新拉起支付
+              重新支付
             </button>
           </div>
         </div>
@@ -300,7 +359,7 @@ export function OrderPaymentPanel({
           {error ? <p className="error-text">{error}</p> : null}
           <button className="primary-button" disabled={isPending} onClick={retryPayment} type="button">
             <RefreshCw size={17} />
-            创建支付尝试
+            确认支付
           </button>
         </div>
       ) : null}
@@ -310,7 +369,7 @@ export function OrderPaymentPanel({
           {error ? <p className="error-text">{error}</p> : null}
           <button className="primary-button" disabled={isPending} onClick={retryPayment} type="button">
             <RefreshCw size={17} />
-            重新拉起支付
+            确认支付
           </button>
         </div>
       ) : null}

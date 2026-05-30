@@ -24,6 +24,9 @@ html {
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
+  line-height: 1.45;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -73,10 +76,28 @@ input,
 select,
 textarea {
   font: inherit;
+  min-width: 0;
 }
 
 button {
   cursor: pointer;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+h1,
+h2,
+h3,
+p,
+button,
+label,
+span,
+strong,
+small,
+dd,
+dt,
+li {
+  overflow-wrap: anywhere;
 }
 
 .app-shell {
@@ -393,24 +414,45 @@ button {
   overflow: hidden;
 }
 
+.payment-failure-card {
+  background: #fff7f5;
+  border: 1px solid #ffd7cf;
+  border-radius: var(--radius);
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.payment-failure-card > strong {
+  color: var(--danger);
+  font-size: 18px;
+}
+
+.payment-failure-card > p {
+  color: #7f1d1d;
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+
 .payment-checkout-head {
   align-items: baseline;
   background: #05c405;
   color: #ffffff;
   display: flex;
   gap: 10px;
-  padding: 24px 26px;
+  padding: clamp(18px, 5vw, 24px) clamp(18px, 5vw, 26px);
 }
 
 .payment-checkout-head strong {
-  font-size: 46px;
+  font-size: clamp(30px, 10vw, 46px);
   font-weight: 760;
   letter-spacing: 0;
   line-height: 1;
 }
 
 .payment-checkout-head span {
-  font-size: 22px;
+  font-size: clamp(18px, 5vw, 22px);
   font-weight: 650;
 }
 
@@ -418,7 +460,7 @@ button {
   display: grid;
   gap: 18px;
   justify-items: center;
-  padding: 28px 24px 24px;
+  padding: clamp(18px, 5vw, 28px) clamp(16px, 5vw, 24px) clamp(18px, 5vw, 24px);
 }
 
 .payment-qr-frame {
@@ -426,7 +468,7 @@ button {
   background: #ffffff;
   display: flex;
   justify-content: center;
-  min-height: 230px;
+  min-height: clamp(180px, 56vw, 230px);
   width: 100%;
 }
 
@@ -482,6 +524,10 @@ button {
 
 .payment-wide-action {
   width: 100%;
+}
+
+.payment-form {
+  display: none;
 }
 
 .error-text {
@@ -1364,18 +1410,19 @@ button {
 }
 
 .login-page {
-  align-items: center;
+  align-items: start;
   display: grid;
-  min-height: 100vh;
-  padding: 24px;
+  min-height: 100dvh;
+  overflow-y: auto;
+  padding: clamp(16px, 4vw, 24px);
 }
 
 .payment-result-shell {
   align-items: start;
   background: #ffffff;
   display: grid;
-  min-height: 100vh;
-  padding: 30px 20px;
+  min-height: 100dvh;
+  padding: clamp(14px, 4vw, 30px) clamp(12px, 4vw, 20px);
 }
 
 .payment-result-card {
@@ -1391,9 +1438,9 @@ button {
 .payment-result-brand {
   border-bottom: 1px solid #d9e0e7;
   color: #1f2937;
-  font-size: 36px;
-  line-height: 1;
-  padding: 48px 76px;
+  font-size: clamp(24px, 6vw, 36px);
+  line-height: 1.15;
+  padding: clamp(22px, 6vw, 48px) clamp(20px, 8vw, 76px);
 }
 
 .payment-result-hero {
@@ -1401,10 +1448,10 @@ button {
   background: #f7f8fa;
   border-bottom: 1px solid #d9e0e7;
   display: grid;
-  gap: 26px;
+  gap: clamp(14px, 4vw, 26px);
   justify-items: center;
-  min-height: 360px;
-  padding: 52px 30px;
+  min-height: clamp(230px, 42vh, 360px);
+  padding: clamp(26px, 7vw, 52px) clamp(16px, 5vw, 30px);
   text-align: center;
 }
 
@@ -1426,7 +1473,7 @@ button {
 
 .payment-result-hero h1 {
   color: #1f2937;
-  font-size: 40px;
+  font-size: clamp(26px, 7vw, 40px);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1.25;
@@ -1435,12 +1482,12 @@ button {
 
 .payment-result-hero strong {
   color: #1f2937;
-  font-size: 40px;
+  font-size: clamp(26px, 7vw, 40px);
   font-weight: 500;
 }
 
 .payment-result-detail {
-  padding: 46px 76px;
+  padding: clamp(22px, 6vw, 46px) clamp(20px, 8vw, 76px);
 }
 
 .payment-result-detail dl {
@@ -2948,7 +2995,8 @@ button {
   background: #ffffff;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 520px;
-  min-height: 100svh;
+  min-height: 100dvh;
+  overflow-y: auto;
 }
 
 .login-visual {
@@ -2975,7 +3023,8 @@ button {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 48px 58px;
+  min-height: min(100dvh, 820px);
+  padding: clamp(28px, 7vw, 48px) clamp(22px, 7vw, 58px);
   position: relative;
 }
 
@@ -2988,19 +3037,21 @@ button {
 }
 
 .user-login-panel h1 {
-  font-size: 34px;
+  font-size: clamp(26px, 6vw, 34px);
+  line-height: 1.18;
   margin: 0 0 10px;
 }
 
 .user-login-panel p {
   color: #7b8798;
-  font-size: 18px;
-  margin: 0 0 34px;
+  font-size: clamp(15px, 3.8vw, 18px);
+  line-height: 1.45;
+  margin: 0 0 clamp(18px, 5vw, 34px);
 }
 
 .user-login-form {
   display: grid;
-  gap: 18px;
+  gap: clamp(12px, 3vw, 18px);
 }
 
 .login-mode {
@@ -3014,7 +3065,8 @@ button {
   border: 0;
   border-radius: 6px;
   color: #7b8798;
-  min-height: 42px;
+  min-height: 46px;
+  padding: 8px 12px;
 }
 
 .login-mode button.active {
@@ -3029,10 +3081,11 @@ button {
   border: 1px solid transparent;
   border-radius: 4px;
   color: #7b8798;
-  display: flex;
+  display: grid;
   gap: 14px;
-  min-height: 54px;
-  padding: 0 18px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  min-height: 0;
+  padding: 14px 16px;
   transition:
     background-color 160ms ease,
     border-color 160ms ease,
@@ -3052,6 +3105,7 @@ button {
   border: 0;
   flex: 1;
   font-size: 16px;
+  line-height: 1.4;
   min-width: 0;
   outline: none;
 }
@@ -3059,7 +3113,7 @@ button {
 .captcha-row {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) 126px;
+  grid-template-columns: minmax(0, 1fr) minmax(118px, 136px);
 }
 
 .captcha-image {
@@ -3068,7 +3122,7 @@ button {
   border: 1px solid #e3e8f0;
   border-radius: 8px;
   display: inline-flex;
-  height: 54px;
+  min-height: 54px;
   justify-content: center;
   overflow: hidden;
   padding: 0;
@@ -3096,6 +3150,7 @@ button {
   gap: 8px;
   justify-content: center;
   min-height: 54px;
+  padding: 10px 14px;
 }
 
 .account-shell {
@@ -3349,17 +3404,17 @@ button {
   .user-login-panel {
     align-self: start;
     justify-content: flex-start;
-    min-height: 100svh;
-    padding: 22px 18px 30px;
+    min-height: auto;
+    padding: 58px 18px 30px;
   }
 
   .user-login-panel h1 {
-    font-size: 30px;
+    font-size: 28px;
   }
 
   .user-login-panel p {
     font-size: 16px;
-    margin-bottom: 22px;
+    margin-bottom: 18px;
   }
 
   .login-visual {
@@ -3372,11 +3427,15 @@ button {
   }
 
   .user-login-form {
-    gap: 14px;
+    gap: 12px;
   }
 
   .captcha-row {
     grid-template-columns: 1fr;
+  }
+
+  .captcha-image {
+    width: 100%;
   }
 
   .account-container {
@@ -3997,7 +4056,7 @@ button {
   align-items: start;
   display: grid;
   gap: 22px;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   padding-top: 34px;
 }
 
@@ -4033,8 +4092,8 @@ button {
 
 .checkout-heading h1 {
   color: #172033;
-  font-size: clamp(30px, 4vw, 46px);
-  line-height: 1.08;
+  font-size: clamp(26px, 3.6vw, 40px);
+  line-height: 1.15;
   margin: 0;
 }
 
@@ -4056,7 +4115,7 @@ button {
   border-radius: 8px;
   display: grid;
   gap: 20px;
-  grid-template-columns: 170px minmax(0, 1fr);
+  grid-template-columns: minmax(96px, 132px) minmax(0, 1fr);
   margin-bottom: 24px;
   padding: 14px;
 }
@@ -4074,7 +4133,7 @@ button {
 
 .checkout-product h2 {
   color: #24324a;
-  font-size: 24px;
+  font-size: clamp(19px, 2.6vw, 24px);
   line-height: 1.28;
   margin: 12px 0 8px;
 }
@@ -4120,7 +4179,7 @@ button {
 .checkout-form-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
 }
 
 .checkout-form-grid .wide {
@@ -4136,7 +4195,31 @@ button {
 .checkout-method-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 188px), 1fr));
+}
+
+.checkout-inline-total {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e4ebf4;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+}
+
+.checkout-inline-total span {
+  color: #667085;
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.checkout-inline-total strong {
+  color: #d92d20;
+  font-size: clamp(22px, 6vw, 28px);
+  line-height: 1.1;
 }
 
 .checkout-method-grid.compact {
@@ -4144,7 +4227,7 @@ button {
 }
 
 .checkout-method {
-  align-items: center;
+  align-items: start;
   background: #ffffff;
   border: 1px solid #e0e6ef;
   border-radius: 8px;
@@ -4154,8 +4237,8 @@ button {
   gap: 10px;
   grid-template-columns: auto minmax(0, 1fr);
   justify-content: start;
-  min-height: 62px;
-  padding: 10px 12px;
+  min-height: 0;
+  padding: 12px;
   text-align: left;
   transition:
     border-color 160ms ease,
@@ -4205,13 +4288,17 @@ button {
 
 .checkout-method-copy strong {
   color: #172033;
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .checkout-method-copy small {
   color: #7b8798;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .checkout-method.active .checkout-method-icon {
@@ -4253,6 +4340,32 @@ button {
   border-radius: 8px;
   margin-top: 22px;
   padding: 18px;
+}
+
+.checkout-detail-panel summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  list-style: none;
+}
+
+.checkout-detail-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.checkout-detail-panel summary > span {
+  border-left: 4px solid #4f7cff;
+  color: #172033;
+  font-size: 20px;
+  font-weight: 850;
+  line-height: 1.3;
+  padding-left: 12px;
+}
+
+.checkout-detail-content {
+  margin-top: 14px;
 }
 
 .checkout-detail-head {
@@ -4463,7 +4576,8 @@ button {
   padding: 12px;
 }
 
-.checkout-submit {
+.checkout-submit,
+.checkout-inline-submit {
   align-items: center;
   background: #087f68;
   border: 0;
@@ -4482,15 +4596,25 @@ button {
     transform 160ms ease;
 }
 
-.checkout-submit:hover {
+.checkout-inline-submit {
+  display: none;
+}
+
+.checkout-submit:hover,
+.checkout-inline-submit:hover {
   background: #066c58;
   box-shadow: 0 16px 34px rgba(8, 127, 104, 0.22);
   transform: translateY(-1px);
 }
 
-.checkout-submit:disabled {
+.checkout-submit:disabled,
+.checkout-inline-submit:disabled {
   cursor: not-allowed;
   opacity: 0.62;
+}
+
+.checkout-inline-submit {
+  margin-top: 12px;
 }
 
 @media (max-width: 1040px) {
@@ -4525,25 +4649,21 @@ button {
 
   .checkout-page-shell {
     grid-template-columns: 1fr;
-    padding-bottom: 160px;
+    padding-bottom: 34px;
   }
 
   .checkout-summary-panel {
     background: rgba(255, 255, 255, 0.98);
     border: 1px solid #dfe7f3;
-    border-radius: 18px 18px 0 0;
-    bottom: 0;
-    box-shadow: 0 -20px 48px rgba(31, 45, 78, 0.16);
-    left: 0;
-    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
-    position: fixed;
-    right: 0;
+    border-radius: 8px;
+    box-shadow: 0 18px 42px rgba(31, 45, 78, 0.08);
+    padding: 16px;
+    position: static;
     top: auto;
-    z-index: 75;
   }
 
   .checkout-main-panel {
-    padding-bottom: 170px;
+    padding-bottom: clamp(18px, 5vw, 30px);
   }
 
   .checkout-summary-mobile-preview {
@@ -4609,7 +4729,7 @@ button {
 
 @media (max-width: 860px) {
   .checkout-main-panel {
-    padding-bottom: 170px;
+    padding-bottom: clamp(18px, 5vw, 28px);
   }
 }
 
@@ -4776,11 +4896,10 @@ button {
   }
 
   .checkout-main-panel {
-    padding-bottom: 170px;
+    padding: 16px;
   }
 
-  .checkout-heading,
-  .checkout-product {
+  .checkout-heading {
     grid-template-columns: 1fr;
   }
 
@@ -4800,11 +4919,27 @@ button {
   }
 
   .checkout-product-image {
-    max-width: 148px;
+    max-width: 96px;
+  }
+
+  .checkout-product {
+    gap: 12px;
+    grid-template-columns: 88px minmax(0, 1fr);
+    padding: 12px;
   }
 
   .checkout-product h2 {
-    font-size: 18px;
+    font-size: 17px;
+    margin-top: 6px;
+  }
+
+  .checkout-product p,
+  .checkout-product-meta {
+    display: none;
+  }
+
+  .checkout-warning {
+    grid-column: 1 / -1;
   }
 
   .checkout-detail-head,
@@ -4843,6 +4978,36 @@ button {
   .checkout-form-grid,
   .checkout-method-grid {
     grid-template-columns: 1fr;
+  }
+
+  .checkout-method {
+    gap: 8px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .checkout-method-icon {
+    border-radius: 10px;
+    height: 34px;
+    width: 34px;
+  }
+
+  .checkout-detail-panel summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .checkout-detail-panel summary > span {
+    font-size: 18px;
+  }
+
+  .checkout-summary-panel {
+    display: none;
+  }
+
+  .button-row > button,
+  .button-row > a {
+    width: 100%;
   }
 
 }

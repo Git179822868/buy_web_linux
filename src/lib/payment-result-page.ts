@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
+import { paymentFailureReason } from "@/lib/payment-failure";
 import { prisma } from "@/lib/prisma";
 import { syncLatestPaymentForOrder } from "@/lib/purchase";
 import { getUserSession } from "@/lib/user-auth";
@@ -64,6 +65,7 @@ export async function loadPaymentResult(orderNo: string, intent: PaymentResultIn
   return {
     amountText: `${(order.amountCent / 100).toFixed(2)} 元`,
     failed,
+    failureReason: paymentFailureReason(payment?.rawResponseJson),
     order,
     paid,
     payment,

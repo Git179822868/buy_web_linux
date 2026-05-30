@@ -7,7 +7,7 @@ Alipay through `yansongda/pay`.
 The Next.js app still owns orders, payment records, refund records, admin state,
 and reconciliation. This gateway only creates upstream payment/refund requests,
 verifies official channel callbacks, and forwards verified results back to
-Next.js with an internal HMAC signature.
+Next.js with an internal AES-256-GCM encrypted body and HMAC signature.
 
 ## Runtime
 
@@ -42,11 +42,15 @@ The gateway and Next.js must share the same internal secret:
 
 ```env
 BUY_WEB_GATEWAY_SECRET="same-value-as-OFFICIAL_PAY_GATEWAY_SECRET"
+BUY_WEB_GATEWAY_ENCRYPTION_KEY="same-value-as-OFFICIAL_PAY_GATEWAY_ENCRYPTION_KEY"
 ```
 
+Generate the encryption key with `openssl rand -base64 32`. The encrypted
+envelope is still signed with HMAC-SHA256 over `timestamp.encryptedBody`.
+
 Runtime PHP must be able to read the plaintext private keys. The security
-boundary is file permissions, HTTPS, HMAC, upstream signature verification,
-minimal public routes, and encrypted backups.
+boundary is file permissions, HTTPS, internal AES-GCM, HMAC, upstream signature
+verification, minimal public routes, and encrypted backups.
 
 ## Public Routes
 

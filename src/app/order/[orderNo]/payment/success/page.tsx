@@ -44,6 +44,7 @@ export default async function PaymentSuccessPage({
         rows={[
           { label: "支付账单", value: result.payment?.providerOrderId || result.payment?.mchOrderNo || result.order.orderNo },
           { label: "支付状态", value: result.payment?.status || result.order.status },
+          { label: "失败原因", value: result.failureReason || "支付通道暂时不可用，请稍后重试。" },
           { label: "订单编号", value: result.order.orderNo },
         ]}
         siteName={result.siteName}

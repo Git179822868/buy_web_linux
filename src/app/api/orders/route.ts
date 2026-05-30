@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { paymentFailureReason } from "@/lib/payment-failure";
 import { createPurchase, getClientIp } from "@/lib/purchase";
 import {
   assertSameOrigin,
@@ -79,6 +80,7 @@ export async function POST(request: Request) {
         payDataType: result.payment.payDataType,
         payData: result.payment.payData,
         providerOrderId: result.payment.providerOrderId,
+        failureReason: paymentFailureReason(result.payment.rawResponseJson),
       },
       package: {
         name: result.package.name,

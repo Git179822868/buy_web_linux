@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { OrderStatus, PaymentProvider, PaymentStatus, RefundStatus } from "@prisma/client";
 
 import {
+  classifyOfficialPaymentError,
   OfficialCompositeGateway,
   payMethodForWayCode,
   type GatewayPayNotifyResult,
@@ -524,14 +525,15 @@ export async function createPaymentForOrder(input: {
       provider: providerForCurrentMode(),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "拉起真实支付失败";
+    const failure = classifyOfficialPaymentError(error);
     const persisted = await persistPaymentResult(paymentState, {
       providerOrderId: paymentState.providerOrderId,
       status: "FAILED",
       payDataType: paymentState.payDataType,
       payData: paymentState.payData,
       rawResponseJson: {
-        message,
+        code: failure.code,
+        message: failure.message,
       },
       paidAt: null,
     });
@@ -830,6 +832,24 @@ export async function handlePayNotify(result: GatewayPayNotifyResult) {
 
   if (!payment || result.amountCent !== payment.amountCent) {
     throw new Error("支付通知校验失败");
+  }
+
+  if (payment.status === "FAILED" && result.status === "PAID") {
+    const confirmed = await realPaymentGateway().queryPayment({
+      mchOrderNo: payment.mchOrderNo,
+      providerOrderId: result.providerOrderId,
+      wayCode: payment.wayCode,
+    });
+
+    if (confirmed.status !== "PAID" || confirmed.providerOrderId !== result.providerOrderId) {
+      throw new Error("失败流水支付通知二次查单失败");
+    }
+
+    return persistPaymentResult(payment, {
+      ...confirmed,
+      providerOrderId: confirmed.providerOrderId || result.providerOrderId,
+      paidAt: confirmed.paidAt || result.paidAt,
+    }, result.rawNotifyJson);
   }
 
   return persistPaymentResult(payment, {

@@ -6,10 +6,8 @@ import { securitySwitchEnabled } from "@/lib/security";
 
 async function parseSignedJsonNotify(request: Request) {
   const rawBody = await request.text();
-  const params = JSON.parse(rawBody) as Record<string, unknown>;
 
   return {
-    ...params,
     __officialRawBody: rawBody,
     __officialTimestamp: request.headers.get("x-buy-web-timestamp") || "",
     __officialSignature: request.headers.get("x-buy-web-signature") || "",

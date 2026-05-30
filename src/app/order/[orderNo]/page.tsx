@@ -5,6 +5,7 @@ import { ArrowLeft, UserRound } from "lucide-react";
 import { OrderPaymentPanel } from "@/components/order-payment-panel";
 import { formatMoney, maskPhone } from "@/lib/money";
 import { customerOrderStatus, paymentStatusLabel, refundStatusLabel } from "@/lib/order-labels";
+import { paymentFailureReason } from "@/lib/payment-failure";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/user-auth";
 
@@ -233,6 +234,7 @@ export default async function OrderPage({
                 ? {
                     id: payment.id,
                     attemptNo: payment.attemptNo,
+                    failureReason: paymentFailureReason(payment.rawResponseJson),
                     provider: payment.provider,
                     status: payment.status,
                     wayCode: payment.wayCode,

@@ -62,6 +62,7 @@ PAYMENT_PROVIDER="official"
 APP_PUBLIC_URL="https://www.example.com"
 OFFICIAL_PAY_GATEWAY_URL="http://127.0.0.1:7301"
 OFFICIAL_PAY_GATEWAY_SECRET="内部 HMAC 密钥"
+OFFICIAL_PAY_GATEWAY_ENCRYPTION_KEY="内部 AES-256-GCM 密钥"
 PAYMENT_RECONCILE_SECRET="支付补偿接口密钥"
 ```
 
@@ -78,7 +79,7 @@ POST {OFFICIAL_PAY_GATEWAY_URL}/payments
 {APP_PUBLIC_URL}/api/payments/official/notify
 ```
 
-内部通知使用 HMAC-SHA256 校验 `timestamp.body`，并再次核对订单号和金额。支付平台故障或回调失败时，`/api/payments/reconcile` 会主动查询仍处于 `CREATED/PAYING` 的 official 支付记录。
+内部请求和回调转发先使用 AES-256-GCM 加密 JSON body，再使用 HMAC-SHA256 校验 `timestamp.encryptedBody`，并再次核对订单号和金额。支付平台创建支付失败或网关不可用时，用户侧直接显示支付失败并保留失败流水；已成功创建但仍处于 `CREATED/PAYING` 的 official 支付记录由 `/api/payments/reconcile` 主动查询补偿。
 
 ## 付费部分参考项目
 

@@ -160,6 +160,11 @@ export function CheckoutForm({ packageItem, user }: { packageItem: CheckoutPacka
         return;
       }
 
+      if (json.payment?.status === "FAILED") {
+        router.push(`/order/${json.order.orderNo}/payment/failure`);
+        return;
+      }
+
       router.push(`/order/${json.order.orderNo}`);
     });
   }
@@ -271,6 +276,10 @@ export function CheckoutForm({ packageItem, user }: { packageItem: CheckoutPacka
 
           <div className="field wide">
             <label>支付方式</label>
+            <div className="checkout-inline-total">
+              <span>应付金额</span>
+              <strong>{formatMoney(totalCent, packageItem.currency)}</strong>
+            </div>
             <div className="checkout-method-grid">
               {visiblePayMethods.map((method) => (
                 <button
@@ -294,11 +303,15 @@ export function CheckoutForm({ packageItem, user }: { packageItem: CheckoutPacka
                 </button>
               ))}
             </div>
-            {isWeChatBrowser ? (
+          {isWeChatBrowser ? (
               <span className="field-hint">
                 当前是微信内浏览器，一期不支持直接拉起微信 H5 支付。请使用系统浏览器打开，或在电脑端扫码支付。
               </span>
             ) : null}
+            <button className="checkout-inline-submit" disabled={isPending} onClick={submitOrder} type="button">
+              <ShieldCheck size={18} />
+              {isPending ? "正在提交" : user ? "确认支付" : "登录后继续"}
+            </button>
           </div>
 
           <div className="field wide">
@@ -313,130 +326,132 @@ export function CheckoutForm({ packageItem, user }: { packageItem: CheckoutPacka
           </div>
         </div>
 
-        <section className="checkout-detail-panel">
-          <div className="checkout-detail-head">
-            <h2>购买须知</h2>
-            <a className="checkout-inline-link" href={supportHref}>
+        <details className="checkout-detail-panel checkout-notes">
+          <summary>
+            <span>购买须知</span>
+            <a className="checkout-inline-link" href={supportHref} onClick={(event) => event.stopPropagation()}>
               在线客服
               <ExternalLink size={14} />
             </a>
-          </div>
+          </summary>
 
-          <div className="checkout-detail-brief" id="checkout-support">
-            <span>订单问题直接联系在线客服</span>
-            <span>工作时间：早上 9 点 - 晚上 12 点</span>
-          </div>
-
-          {!isXiaohongshu ? (
-            <div className="checkout-important-note" id="binding-guide">
-              <div>
-                <strong>没有合作码 / 个人账号，下单前请先绑定蓝V账号</strong>
-                <p>订单完成后可解绑。</p>
-              </div>
-              <a
-                className="checkout-inline-link solid"
-                href="https://kizw88h0rg6.feishu.cn/docx/VSBOd5R6EoyraJxfzO1cvdTanph"
-                rel="noreferrer"
-                target="_blank"
-              >
-                绑定教程：点我查看
-              </a>
+          <div className="checkout-detail-content">
+            <div className="checkout-detail-brief" id="checkout-support">
+              <span>订单问题直接联系在线客服</span>
+              <span>工作时间：早上 9 点 - 晚上 12 点</span>
             </div>
-          ) : null}
 
-          <div className="checkout-detail-stack">
-            {isXiaohongshu ? (
-              <>
-                <article className="checkout-detail-block">
-                  <div className="checkout-detail-number">1</div>
-                  <div className="checkout-detail-copy">
-                    <h3>下单信息</h3>
-                    <p>小红书套餐只需要填写红薯账号，请确认账号准确后再提交。</p>
-                  </div>
-                </article>
+            {!isXiaohongshu ? (
+              <div className="checkout-important-note" id="binding-guide">
+                <div>
+                  <strong>没有合作码 / 个人账号，下单前请先绑定蓝V账号</strong>
+                  <p>订单完成后可解绑。</p>
+                </div>
+                <a
+                  className="checkout-inline-link solid"
+                  href="https://kizw88h0rg6.feishu.cn/docx/VSBOd5R6EoyraJxfzO1cvdTanph"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  绑定教程：点我查看
+                </a>
+              </div>
+            ) : null}
 
-                <article className="checkout-detail-block">
-                  <div className="checkout-detail-number">2</div>
-                  <div className="checkout-detail-copy">
-                    <h3>交付时间</h3>
-                    <p>通常售后 3 天内处理；当天 6 点前的订单，隔天 6 点左右完成，大单量一般 7 天内完成。</p>
-                  </div>
-                </article>
+            <div className="checkout-detail-stack">
+              {isXiaohongshu ? (
+                <>
+                  <article className="checkout-detail-block">
+                    <div className="checkout-detail-number">1</div>
+                    <div className="checkout-detail-copy">
+                      <h3>下单信息</h3>
+                      <p>小红书套餐只需要填写红薯账号，请确认账号准确后再提交。</p>
+                    </div>
+                  </article>
 
-                <article className="checkout-detail-block alert">
-                  <div className="checkout-detail-number">3</div>
-                  <div className="checkout-detail-copy">
-                    <h3>注意事项</h3>
-                    <ul className="checkout-detail-list">
-                      <li>单次建议上限 8000 左右，已经下过的账号不要重复下同类订单。</li>
-                      <li>如遇缺量请及时联系在线客服处理。</li>
-                      <li>真实地推粉丝，可同步蒲公英。</li>
-                    </ul>
-                  </div>
-                </article>
-              </>
-            ) : (
-              <>
-                <article className="checkout-detail-block" id="cooperation-guide">
-                  <div className="checkout-detail-number">1</div>
-                  <div className="checkout-detail-copy">
-                    <h3>怎么查看合作码</h3>
-                    <p>抖音 → 我 → 左上角 → 设置 → 账号与安全 → 我的合作码。</p>
-                  </div>
-                </article>
+                  <article className="checkout-detail-block">
+                    <div className="checkout-detail-number">2</div>
+                    <div className="checkout-detail-copy">
+                      <h3>交付时间</h3>
+                      <p>通常售后 3 天内处理；当天 6 点前的订单，隔天 6 点左右完成，大单量一般 7 天内完成。</p>
+                    </div>
+                  </article>
 
-                <article className="checkout-detail-block">
-                  <div className="checkout-detail-number">2</div>
-                  <div className="checkout-detail-copy">
-                    <h3>没有合作码怎么办</h3>
-                    <p>没有合作码或当前为个人账号，请先绑定蓝V账号后再购买。</p>
-                    <p>
-                      <a
-                        className="checkout-inline-link"
-                        href="https://kizw88h0rg6.feishu.cn/docx/VSBOd5R6EoyraJxfzO1cvdTanph"
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        点我查看获取合作码教程
-                        <ExternalLink size={14} />
-                      </a>
-                    </p>
-                  </div>
-                </article>
+                  <article className="checkout-detail-block alert">
+                    <div className="checkout-detail-number">3</div>
+                    <div className="checkout-detail-copy">
+                      <h3>注意事项</h3>
+                      <ul className="checkout-detail-list">
+                        <li>单次建议上限 8000 左右，已经下过的账号不要重复下同类订单。</li>
+                        <li>如遇缺量请及时联系在线客服处理。</li>
+                        <li>真实地推粉丝，可同步蒲公英。</li>
+                      </ul>
+                    </div>
+                  </article>
+                </>
+              ) : (
+                <>
+                  <article className="checkout-detail-block" id="cooperation-guide">
+                    <div className="checkout-detail-number">1</div>
+                    <div className="checkout-detail-copy">
+                      <h3>怎么查看合作码</h3>
+                      <p>抖音 → 我 → 左上角 → 设置 → 账号与安全 → 我的合作码。</p>
+                    </div>
+                  </article>
 
-                <article className="checkout-detail-block">
-                  <div className="checkout-detail-number">3</div>
-                  <div className="checkout-detail-copy">
-                    <h3>购买之后要做什么</h3>
-                    <p>付款后 10-30 分钟内，抖音会收到授权信息。</p>
-                    <p>请在抖音消息列表或合作码页面确认授权，确认后客服才会开始处理。</p>
-                  </div>
-                </article>
+                  <article className="checkout-detail-block">
+                    <div className="checkout-detail-number">2</div>
+                    <div className="checkout-detail-copy">
+                      <h3>没有合作码怎么办</h3>
+                      <p>没有合作码或当前为个人账号，请先绑定蓝V账号后再购买。</p>
+                      <p>
+                        <a
+                          className="checkout-inline-link"
+                          href="https://kizw88h0rg6.feishu.cn/docx/VSBOd5R6EoyraJxfzO1cvdTanph"
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          点我查看获取合作码教程
+                          <ExternalLink size={14} />
+                        </a>
+                      </p>
+                    </div>
+                  </article>
 
-                <article className="checkout-detail-block alert">
-                  <div className="checkout-detail-number">4</div>
-                  <div className="checkout-detail-copy">
-                    <h3>订单进行中的注意事项</h3>
-                    <ul className="checkout-detail-list">
-                      <li>建议关闭账号私信功能，至少改为“互相关注的人可私信”。</li>
-                      <li>不要设置私密账号。</li>
-                      <li>不要删除我们的投放素材，如想调整素材，请联系客服处理。</li>
-                    </ul>
-                  </div>
-                </article>
+                  <article className="checkout-detail-block">
+                    <div className="checkout-detail-number">3</div>
+                    <div className="checkout-detail-copy">
+                      <h3>购买之后要做什么</h3>
+                      <p>付款后 10-30 分钟内，抖音会收到授权信息。</p>
+                      <p>请在抖音消息列表或合作码页面确认授权，确认后客服才会开始处理。</p>
+                    </div>
+                  </article>
 
-                <article className="checkout-detail-block">
-                  <div className="checkout-detail-number">5</div>
-                  <div className="checkout-detail-copy">
-                    <h3>订单长时间不到账怎么办</h3>
-                    <p>请先确认自己是否已经完成授权，不授权的话是操作不了的。</p>
-                    <p>如果授权之后长时间没有操作，请及时联系客服处理。</p>
-                  </div>
-                </article>
-              </>
-            )}
+                  <article className="checkout-detail-block alert">
+                    <div className="checkout-detail-number">4</div>
+                    <div className="checkout-detail-copy">
+                      <h3>订单进行中的注意事项</h3>
+                      <ul className="checkout-detail-list">
+                        <li>建议关闭账号私信功能，至少改为“互相关注的人可私信”。</li>
+                        <li>不要设置私密账号。</li>
+                        <li>不要删除我们的投放素材，如想调整素材，请联系客服处理。</li>
+                      </ul>
+                    </div>
+                  </article>
+
+                  <article className="checkout-detail-block">
+                    <div className="checkout-detail-number">5</div>
+                    <div className="checkout-detail-copy">
+                      <h3>订单长时间不到账怎么办</h3>
+                      <p>请先确认自己是否已经完成授权，不授权的话是操作不了的。</p>
+                      <p>如果授权之后长时间没有操作，请及时联系客服处理。</p>
+                    </div>
+                  </article>
+                </>
+              )}
+            </div>
           </div>
-        </section>
+        </details>
       </section>
 
       <aside className={`checkout-summary-panel ${showSummaryDetail ? "expanded" : ""}`}>
@@ -481,7 +496,7 @@ export function CheckoutForm({ packageItem, user }: { packageItem: CheckoutPacka
 
         <button className="checkout-submit" disabled={isPending} onClick={submitOrder} type="button">
           <ShieldCheck size={18} />
-          {isPending ? "正在提交" : user ? "确认并支付" : "登录后继续"}
+          {isPending ? "正在提交" : user ? "确认支付" : "登录后继续"}
         </button>
       </aside>
     </div>

@@ -1,7 +1,12 @@
-import { createHmac, timingSafeEqual } from "crypto";
 import type { PaymentStatus, RefundStatus } from "@prisma/client";
 
 import { appPublicUrl, requiredEnv } from "@/lib/env";
+import {
+  decryptInternalPayPayload,
+  encryptInternalPayPayload,
+  signInternalBody,
+  timingSafeEqualHex,
+} from "@/lib/internal-pay-crypto";
 
 export type PayMethod =
   | "wechat_native"
@@ -154,11 +159,17 @@ type OfficialRefundData = {
   refundedAt?: string | number | null;
 };
 
-const callbackSignatureFields = new Set([
-  "__officialRawBody",
-  "__officialTimestamp",
-  "__officialSignature",
-]);
+export type OfficialPaymentFailureCode = "CONFIG_MISSING" | "TIMEOUT" | "UPSTREAM_UNAVAILABLE";
+
+export class OfficialPaymentGatewayError extends Error {
+  code: OfficialPaymentFailureCode;
+
+  constructor(code: OfficialPaymentFailureCode, message: string) {
+    super(message);
+    this.name = "OfficialPaymentGatewayError";
+    this.code = code;
+  }
+}
 
 function parseProviderTime(value: unknown) {
   if (value === undefined || value === null || value === "") {
@@ -224,48 +235,112 @@ function normalizeRefundStatus(value: unknown): RefundStatus {
 }
 
 function officialConfig() {
+  const timeoutMs = Number(process.env.OFFICIAL_PAY_GATEWAY_TIMEOUT_MS || 10000);
+
   return {
+    encryptionKey: requiredEnv("OFFICIAL_PAY_GATEWAY_ENCRYPTION_KEY"),
     gatewayUrl: requiredEnv("OFFICIAL_PAY_GATEWAY_URL").replace(/\/$/, ""),
     secret: requiredEnv("OFFICIAL_PAY_GATEWAY_SECRET"),
+    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs >= 1000 ? timeoutMs : 10000,
   };
-}
-
-function signPayload(secret: string, timestamp: string, body: string) {
-  return createHmac("sha256", secret)
-    .update(`${timestamp}.${body}`, "utf8")
-    .digest("hex");
-}
-
-function timingSafeEqualHex(a: string, b: string) {
-  const aBuffer = Buffer.from(a, "hex");
-  const bBuffer = Buffer.from(b, "hex");
-
-  return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
 }
 
 function responseData<TData>(response: OfficialGatewayResponse<TData>) {
   return (response.data || response) as TData;
 }
 
+function gatewayFailureCode(message: string, status?: number): OfficialPaymentFailureCode {
+  const normalized = message.toUpperCase();
+
+  if (
+    normalized.includes("CONFIG_MISSING") ||
+    normalized.includes("MISSING REQUIRED ENVIRONMENT VARIABLE") ||
+    normalized.includes("MISSING OFFICIAL") ||
+    normalized.includes("MISSING INTERNAL") ||
+    normalized.includes("ENCRYPTION_KEY") ||
+    normalized.includes("INVALID INTERNAL ENCRYPTION KEY")
+  ) {
+    return "CONFIG_MISSING";
+  }
+
+  if (normalized.includes("TIMEOUT") || normalized.includes("TIMED OUT") || normalized.includes("ABORT")) {
+    return "TIMEOUT";
+  }
+
+  if (status && status >= 500) {
+    return "UPSTREAM_UNAVAILABLE";
+  }
+
+  return "UPSTREAM_UNAVAILABLE";
+}
+
+export function classifyOfficialPaymentError(error: unknown): {
+  code: OfficialPaymentFailureCode;
+  message: string;
+} {
+  if (error instanceof OfficialPaymentGatewayError) {
+    return {
+      code: error.code,
+      message: error.message,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      code: gatewayFailureCode(error.message),
+      message: error.message || "支付通道暂时不可用，请稍后重试",
+    };
+  }
+
+  return {
+    code: "UPSTREAM_UNAVAILABLE",
+    message: "支付通道暂时不可用，请稍后重试",
+  };
+}
+
 async function postOfficial<TData>(path: string, payload: Record<string, unknown>) {
   const config = officialConfig();
-  const body = JSON.stringify(payload);
+  const body = encryptInternalPayPayload(payload, config.encryptionKey);
   const timestamp = Date.now().toString();
-  const signature = signPayload(config.secret, timestamp, body);
-  const response = await fetch(`${config.gatewayUrl}${path}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-buy-web-timestamp": timestamp,
-      "x-buy-web-signature": signature,
-    },
-    body,
-    cache: "no-store",
-  });
-  const json = (await response.json()) as OfficialGatewayResponse<TData>;
+  const signature = signInternalBody(config.secret, timestamp, body);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+  let response: Response;
+
+  try {
+    response = await fetch(`${config.gatewayUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-buy-web-timestamp": timestamp,
+        "x-buy-web-signature": signature,
+      },
+      body,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const aborted = error instanceof Error && error.name === "AbortError";
+    throw new OfficialPaymentGatewayError(
+      aborted ? "TIMEOUT" : "UPSTREAM_UNAVAILABLE",
+      aborted ? "支付通道响应超时，请稍后重试" : "支付通道暂时不可用，请稍后重试",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const json = await response.json().catch(() => ({
+    ok: false,
+    message: `Official payment gateway returned invalid JSON with HTTP ${response.status}`,
+  })) as OfficialGatewayResponse<TData>;
 
   if (!response.ok || json.ok === false) {
-    throw new Error(json.message || `Official payment gateway failed with HTTP ${response.status}`);
+    const message = json.message || `Official payment gateway failed with HTTP ${response.status}`;
+    const code = gatewayFailureCode(message, response.status);
+    throw new OfficialPaymentGatewayError(
+      code,
+      code === "CONFIG_MISSING" ? "真实支付配置不完整，请联系管理员" : message,
+    );
   }
 
   return {
@@ -274,13 +349,7 @@ async function postOfficial<TData>(path: string, payload: Record<string, unknown
   };
 }
 
-function cleanNotifyJson(params: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(params).filter(([key]) => !callbackSignatureFields.has(key)),
-  );
-}
-
-function assertValidOfficialCallback(params: Record<string, unknown>) {
+function decryptValidOfficialCallback(params: Record<string, unknown>) {
   const config = officialConfig();
   const rawBody = params.__officialRawBody;
   const timestamp = params.__officialTimestamp;
@@ -296,9 +365,11 @@ function assertValidOfficialCallback(params: Record<string, unknown>) {
     throw new Error("Official callback timestamp is invalid");
   }
 
-  if (!timingSafeEqualHex(signPayload(config.secret, timestamp, rawBody), signature)) {
+  if (!timingSafeEqualHex(signInternalBody(config.secret, timestamp, rawBody), signature)) {
     throw new Error("Official callback signature verification failed");
   }
+
+  return decryptInternalPayPayload(rawBody, config.encryptionKey);
 }
 
 export class OfficialCompositeGateway implements PaymentGateway {
@@ -442,28 +513,28 @@ export class OfficialCompositeGateway implements PaymentGateway {
   }
 
   verifyPayNotify(params: Record<string, unknown>): GatewayPayNotifyResult {
-    assertValidOfficialCallback(params);
+    const payload = decryptValidOfficialCallback(params);
 
     return {
-      mchOrderNo: String(params.mchOrderNo || ""),
-      providerOrderId: params.providerOrderId ? String(params.providerOrderId) : null,
-      amountCent: Number(params.amountCent || 0),
-      status: normalizePaymentStatus(params.status),
-      paidAt: normalizePaymentStatus(params.status) === "PAID" ? parseProviderTime(params.paidAt) || new Date() : null,
-      rawNotifyJson: cleanNotifyJson(params),
+      mchOrderNo: String(payload.mchOrderNo || ""),
+      providerOrderId: payload.providerOrderId ? String(payload.providerOrderId) : null,
+      amountCent: Number(payload.amountCent || 0),
+      status: normalizePaymentStatus(payload.status),
+      paidAt: normalizePaymentStatus(payload.status) === "PAID" ? parseProviderTime(payload.paidAt) || new Date() : null,
+      rawNotifyJson: payload,
     };
   }
 
   verifyRefundNotify(params: Record<string, unknown>): GatewayRefundNotifyResult {
-    assertValidOfficialCallback(params);
+    const payload = decryptValidOfficialCallback(params);
 
     return {
-      mchRefundNo: String(params.mchRefundNo || ""),
-      providerRefundId: params.providerRefundId ? String(params.providerRefundId) : null,
-      amountCent: Number(params.amountCent || 0),
-      status: normalizeRefundStatus(params.status),
-      refundedAt: normalizeRefundStatus(params.status) === "SUCCESS" ? parseProviderTime(params.refundedAt) || new Date() : null,
-      rawNotifyJson: cleanNotifyJson(params),
+      mchRefundNo: String(payload.mchRefundNo || ""),
+      providerRefundId: payload.providerRefundId ? String(payload.providerRefundId) : null,
+      amountCent: Number(payload.amountCent || 0),
+      status: normalizeRefundStatus(payload.status),
+      refundedAt: normalizeRefundStatus(payload.status) === "SUCCESS" ? parseProviderTime(payload.refundedAt) || new Date() : null,
+      rawNotifyJson: payload,
     };
   }
 }
